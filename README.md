@@ -3,7 +3,7 @@ OpenNMS Sink API Receiver
 
 A sample Kafka Consumer application to display sink into the standard output for troubleshooting purposes. It supports reconstructing split messages when the payload exceeds the limit.
 
-This repository also contains a Dockerfile to compile and build an image with the tool, which can be fully customized through environment variables, so the solution can be used with Kubernetes (the sample YAML file is also available).
+This repository also contains a Dockerfile to compile and build an image with the tool, which can be fully customized through environment variables.
 
 Inside the `protobuf` directory, the [sink.proto](protobuf/sink.proto) file extracted from OpenNMS source code contains the Protobuf definitions. If that file changes, make sure to re-generate the protobuf code by using the [build.sh](protobuf/build.sh) command, which expects to have `protoc` installed on your system.
 
