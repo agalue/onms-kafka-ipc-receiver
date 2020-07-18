@@ -187,7 +187,7 @@ func (cli *KafkaClient) Start(action ProcessSinkMessage) {
 			}
 			_, err := cli.consumer.CommitMessage(e) // If there are errors on the action, the message won't be reprocessed.
 			if err != nil {
-				log.Printf("error commiting message: %v", err)
+				log.Printf("error committing message: %v", err)
 			}
 		case kafka.Error:
 			log.Printf("consumer error %v", e)
