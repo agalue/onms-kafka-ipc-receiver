@@ -1,7 +1,9 @@
-OpenNMS Sink API Receiver
+OpenNMS Sink API Receiver [![Go Report Card](https://goreportcard.com/badge/github.com/agalue/sink-receiver)](https://goreportcard.com/report/github.com/agalue/sink-receiver)
 ====
 
 A sample Kafka Consumer application to display sink into the standard output for troubleshooting purposes. It supports reconstructing split messages when the payload exceeds the limit.
+
+It exposes Prometheus compatible metrics through port 8181, using the `/metrics` endpoint.
 
 This repository also contains a Dockerfile to compile and build an image with the tool, which can be fully customized through environment variables, so the solution can be used with Kubernetes (the sample YAML file is also available).
 
