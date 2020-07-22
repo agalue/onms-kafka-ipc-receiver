@@ -6,12 +6,38 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/agalue/sink-receiver/protobuf/sink"
 	"github.com/golang/protobuf/proto"
+	"github.com/prometheus/client_golang/prometheus"
 	"gopkg.in/confluentinc/confluent-kafka-go.v1/kafka"
 	"gotest.tools/assert"
 )
+
+type mockConsumer struct {
+	msgChannel chan *kafka.Message
+}
+
+func (mock *mockConsumer) Send(msg *kafka.Message) {
+	mock.msgChannel <- msg
+}
+
+func (mock *mockConsumer) Subscribe(topic string, rebalanceCb kafka.RebalanceCb) error {
+	return nil
+}
+
+func (mock *mockConsumer) Poll(timeoutMs int) (event kafka.Event) {
+	return <-mock.msgChannel
+}
+
+func (mock *mockConsumer) CommitMessage(m *kafka.Message) ([]kafka.TopicPartition, error) {
+	return []kafka.TopicPartition{}, nil
+}
+
+func (mock *mockConsumer) Close() (err error) {
+	return nil
+}
 
 func TestCreateConfig(t *testing.T) {
 	cli := &KafkaClient{
@@ -43,21 +69,37 @@ func TestCreateConfig(t *testing.T) {
 }
 
 func TestProcessSingleMessage(t *testing.T) {
-	cli := &KafkaClient{}
-	cli.createVariables()
+	cli := createKafkaClient(nil)
 	data := cli.processMessage(buildMessage("0001", 0, 1, []byte("ABC")))
 	assert.Equal(t, "ABC", string(data))
 }
 
 func TestProcessMultipleMessages(t *testing.T) {
-	cli := &KafkaClient{}
-	cli.createVariables()
+	cli := createKafkaClient(nil)
 	wg := &sync.WaitGroup{}
 	for i := 0; i < 5; i++ {
 		wg.Add(1)
 		go runProcessMessageTest(t, wg, cli, fmt.Sprintf("ID%d", i))
 	}
 	wg.Wait()
+}
+
+func TestClient(t *testing.T) {
+	mock := &mockConsumer{
+		msgChannel: make(chan *kafka.Message, 1),
+	}
+	cli := createKafkaClient(mock)
+	var message string
+	go func() {
+		cli.Start(func(msg []byte) {
+			fmt.Printf("%s\n", string(msg))
+			message = string(msg)
+		})
+	}()
+	mock.Send(buildMessage("001", 0, 1, []byte("This is a test")))
+	time.Sleep(1 * time.Second)
+	assert.Equal(t, "This is a test", message)
+	cli.Stop()
 }
 
 func runProcessMessageTest(t *testing.T, wg *sync.WaitGroup, cli *KafkaClient, id string) {
@@ -89,4 +131,18 @@ func buildMessage(id string, chunk, total int32, data []byte) *kafka.Message {
 		Value:          bytes,
 	}
 	return kafkaMsg
+}
+
+func createKafkaClient(mock *mockConsumer) *KafkaClient {
+	cli := &KafkaClient{
+		consumer: mock,
+	}
+	cli.createVariables()
+	cli.chunkProcessed = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "onms_sink_processed_messages_total",
+	})
+	cli.msgProcessed = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "onms_sink_processed_chunk_total",
+	})
+	return cli
 }

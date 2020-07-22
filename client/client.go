@@ -17,6 +17,14 @@ import (
 	"gopkg.in/confluentinc/confluent-kafka-go.v1/kafka"
 )
 
+// KafkaConsumer creates an generic interface with the relevant methods from kafka.Consumer
+type KafkaConsumer interface {
+	Subscribe(topic string, rebalanceCb kafka.RebalanceCb) error
+	Poll(timeoutMs int) (event kafka.Event)
+	CommitMessage(m *kafka.Message) ([]kafka.TopicPartition, error)
+	Close() (err error)
+}
+
 // ProcessSinkMessage defines the action to execute after successfully received a Sink message.
 // It receives the payload as an array of bytes, and a wait group for synchronization purposes.
 type ProcessSinkMessage func(msg []byte)
@@ -28,7 +36,7 @@ type KafkaClient struct {
 	GroupID    string // The name of the Consumer Group ID.
 	Parameters string // CSV of KVP for the Kafka Consumer Parameters.
 
-	consumer     *kafka.Consumer
+	consumer     KafkaConsumer
 	msgBuffer    map[string][]byte
 	chunkTracker map[string]int32
 	mutex        *sync.RWMutex
@@ -66,6 +74,9 @@ func (cli *KafkaClient) createVariables() {
 	cli.msgBuffer = make(map[string][]byte)
 	cli.chunkTracker = make(map[string]int32)
 	cli.mutex = &sync.RWMutex{}
+}
+
+func (cli *KafkaClient) registerCounters() {
 	cli.msgProcessed = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "onms_sink_processed_messages_total",
 		Help: "The total number of processed messages",
@@ -143,6 +154,7 @@ func (cli *KafkaClient) Initialize() error {
 		return fmt.Errorf("cannot subscribe to topic %s: %v", cli.Topic, err)
 	}
 	cli.createVariables()
+	cli.registerCounters()
 	return nil
 }
 
