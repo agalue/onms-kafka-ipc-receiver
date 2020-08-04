@@ -41,9 +41,13 @@ func (mock *mockConsumer) Close() (err error) {
 
 func TestCreateConfig(t *testing.T) {
 	cli := &KafkaClient{
-		Bootstrap:  "kafka1:9092",
-		GroupID:    "GoTest",
-		Parameters: "acks=1,fetch.min.bytes=2048,ssl.truststore.location",
+		Bootstrap: "kafka1:9092",
+		GroupID:   "GoTest",
+		Parameters: Propertites{
+			"acks=1",
+			"fetch.min.bytes=2048",
+			"ssl.truststore.location",
+		},
 	}
 	config := cli.createConfig()
 

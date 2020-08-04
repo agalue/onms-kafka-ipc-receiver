@@ -10,7 +10,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/agalue/sink-receiver/protobuf/netflow"
 	"github.com/agalue/sink-receiver/protobuf/sink"
+	"github.com/agalue/sink-receiver/protobuf/telemetry"
 	"github.com/golang/protobuf/proto"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -29,12 +31,26 @@ type KafkaConsumer interface {
 // It receives the payload as an array of bytes, and a wait group for synchronization purposes.
 type ProcessSinkMessage func(msg []byte)
 
+// Propertites represents an array of string flags
+type Propertites []string
+
+func (p *Propertites) String() string {
+	return strings.Join(*p, ", ")
+}
+
+// Set stores a string flag in the array
+func (p *Propertites) Set(value string) error {
+	*p = append(*p, value)
+	return nil
+}
+
 // KafkaClient defines a simple Kafka consumer client.
 type KafkaClient struct {
-	Bootstrap  string // The Kafka Server Bootstrap string.
-	Topic      string // The name of the Kafka Topic.
-	GroupID    string // The name of the Consumer Group ID.
-	Parameters string // CSV of KVP for the Kafka Consumer Parameters.
+	Bootstrap  string      // The Kafka Server Bootstrap string.
+	Topic      string      // The name of the Kafka Topic.
+	GroupID    string      // The name of the Consumer Group ID.
+	Parameters Propertites // List of Kafka Consumer Parameters.
+	IsFlow     bool        // true to treat payload as flow data.
 
 	consumer     KafkaConsumer
 	msgBuffer    map[string][]byte
@@ -54,8 +70,8 @@ func (cli *KafkaClient) createConfig() *kafka.ConfigMap {
 		"session.timeout.ms":    6000,
 		"broker.address.family": "v4",
 	}
-	if cli.Parameters != "" {
-		for _, kv := range strings.Split(cli.Parameters, ",") {
+	if cli.Parameters != nil {
+		for _, kv := range cli.Parameters {
 			array := strings.Split(kv, "=")
 			if len(array) == 2 {
 				if err := config.SetKey(array[0], array[1]); err != nil {
@@ -125,6 +141,24 @@ func (cli *KafkaClient) processMessage(msg *kafka.Message) []byte {
 		cli.mutex.RUnlock()
 	}
 	cli.bufferCleanup(id)
+	// Process Flows
+	if cli.IsFlow {
+		msgLog := &telemetry.TelemetryMessageLog{}
+		if err := proto.Unmarshal(data, msgLog); err != nil {
+			log.Printf("warning: invalid telemetry message received: %v", err)
+			return nil
+		}
+		for _, msg := range msgLog.Message {
+			flow := &netflow.FlowMessage{}
+			err := proto.Unmarshal(msg.Bytes, flow)
+			if err != nil {
+				log.Printf("warning: invalid netflow message received: %v", err)
+				return nil
+			}
+			bytes, _ := json.MarshalIndent(flow, "", "  ")
+			return bytes
+		}
+	}
 	return data
 }
 

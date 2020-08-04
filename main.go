@@ -24,7 +24,8 @@ func main() {
 	flag.StringVar(&cli.Bootstrap, "bootstrap", "localhost:9092", "kafka bootstrap server")
 	flag.StringVar(&cli.Topic, "topic", "OpenNMS.Sink.Trap", "kafka topic that will receive the messages")
 	flag.StringVar(&cli.GroupID, "group-id", "sink-go-client", "the consumer group ID")
-	flag.StringVar(&cli.Parameters, "parameters", "", "optional kafka consumer parameters as a CSV of Key-Value pairs")
+	flag.Var(&cli.Parameters, "parameter", "Kafka consumer configuration attribute (can be used multiple times)\nfor instance: acks=1")
+	flag.BoolVar(&cli.IsFlow, "is-flow", false, "Set to true if the payload is a Flow message")
 	flag.Parse()
 
 	log.Println("starting consumer")

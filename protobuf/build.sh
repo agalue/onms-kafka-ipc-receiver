@@ -3,5 +3,7 @@
 
 type protoc >/dev/null 2>&1 || { echo >&2 "protoc required but it's not installed; aborting."; exit 1; }
 
-mkdir -p sink
-protoc -I . sink.proto --go_out=./sink
+for module in sink telemetry netflow; do
+  mkdir -p $module
+  protoc -I . $module.proto --go_out=./$module
+done
