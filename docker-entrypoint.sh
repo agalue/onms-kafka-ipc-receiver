@@ -24,7 +24,7 @@ done
 
 OPTIONS=()
 if [ ! -z "${BOOTSTRAP_SERVER}" ]; then
-  OPTIONS+=(-bootstrap "${BOOTSTRAP_SERVES}")
+  OPTIONS+=(-bootstrap "${BOOTSTRAP_SERVER}")
 fi
 if [ ! -z "${GROUP_ID}" ]; then
   OPTIONS+=(-group-id "${GROUP_ID}")
