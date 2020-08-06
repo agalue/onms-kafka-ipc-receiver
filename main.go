@@ -40,7 +40,8 @@ func main() {
 		// TODO Implement your custom actions here //
 		/////////////////////////////////////////////
 
-		log.Printf("message received: %s", string(msg))
+		log.Println("message received")
+		fmt.Println(string(msg))
 	})
 
 	go func() {
