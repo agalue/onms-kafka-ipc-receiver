@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/agalue/sink-receiver/protobuf/netflow"
+	"github.com/agalue/sink-receiver/protobuf/rpc"
 	"github.com/agalue/sink-receiver/protobuf/sink"
 	"github.com/agalue/sink-receiver/protobuf/telemetry"
 	"github.com/golang/protobuf/proto"
@@ -44,13 +45,22 @@ func (p *Propertites) Set(value string) error {
 	return nil
 }
 
+// ipcMessage internal structure that represents an IPC message
+type ipcMessage struct {
+	chunk   int32
+	total   int32
+	id      string
+	content []byte
+}
+
 // KafkaClient defines a simple Kafka consumer client.
 type KafkaClient struct {
-	Bootstrap  string      // The Kafka Server Bootstrap string.
-	Topic      string      // The name of the Kafka Topic.
-	GroupID    string      // The name of the Consumer Group ID.
-	Parameters Propertites // List of Kafka Consumer Parameters.
-	IsFlow     bool        // true to treat payload as flow data.
+	Bootstrap   string      // The Kafka Server Bootstrap string.
+	Topic       string      // The name of the Kafka Topic.
+	GroupID     string      // The name of the Consumer Group ID.
+	Parameters  Propertites // List of Kafka Consumer Parameters.
+	IPC         string      // either 'rpc' or 'sink'.
+	IsTelemetry bool        // true to treat payload as telemetry data (only when IPC='sink')
 
 	consumer     KafkaConsumer
 	msgBuffer    map[string][]byte
@@ -103,63 +113,83 @@ func (cli *KafkaClient) registerCounters() {
 	})
 }
 
+func (cli *KafkaClient) getIpcMessage(msg *kafka.Message) (*ipcMessage, error) {
+	if cli.IPC == "rpc" {
+		rpcMsg := &rpc.RpcMessageProto{}
+		if err := proto.Unmarshal(msg.Value, rpcMsg); err != nil {
+			return nil, fmt.Errorf("warning: invalid rpc message received: %v", err)
+		}
+		cli.chunkProcessed.Inc()
+		return &ipcMessage{
+			chunk:   rpcMsg.CurrentChunkNumber + 1, // Chunks starts at 0
+			total:   rpcMsg.TotalChunks,
+			id:      rpcMsg.RpcId,
+			content: rpcMsg.RpcContent,
+		}, nil
+	}
+	sinkMsg := &sink.SinkMessage{}
+	if err := proto.Unmarshal(msg.Value, sinkMsg); err != nil {
+		return nil, fmt.Errorf("warning: invalid sink message received: %v", err)
+	}
+	return &ipcMessage{
+		chunk:   sinkMsg.GetCurrentChunkNumber() + 1, // Chunks starts at 0
+		total:   sinkMsg.GetTotalChunks(),
+		id:      sinkMsg.GetMessageId(),
+		content: sinkMsg.GetContent(),
+	}, nil
+}
+
 // Processes a Kafka message. It return a non-empty slice when the message is complete, otherwise returns nil.
 // This is a concurrent safe method.
 func (cli *KafkaClient) processMessage(msg *kafka.Message) []byte {
-	sinkMsg := &sink.SinkMessage{}
-	if err := proto.Unmarshal(msg.Value, sinkMsg); err != nil {
-		log.Printf("warning: invalid message received: %v", err)
+	cli.chunkProcessed.Inc()
+	ipcmsg, err := cli.getIpcMessage(msg)
+	if err != nil {
 		return nil
 	}
-	cli.chunkProcessed.Inc()
-	chunk := sinkMsg.GetCurrentChunkNumber() + 1 // Chunks starts at 0
-	total := sinkMsg.GetTotalChunks()
-	id := sinkMsg.GetMessageId()
-	content := sinkMsg.GetContent()
-	log.Printf("received message %s (chunk %d of %d, with %d bytes) on %s", id, chunk, total, len(content), msg.TopicPartition)
-	if chunk != total {
+	log.Printf("received message %s (chunk %d of %d, with %d bytes) on %s", ipcmsg.id, ipcmsg.chunk, ipcmsg.total, len(ipcmsg.content), msg.TopicPartition)
+	if ipcmsg.chunk != ipcmsg.total {
 		cli.mutex.Lock()
-		if cli.chunkTracker[id] < chunk {
+		if cli.chunkTracker[ipcmsg.id] < ipcmsg.chunk {
 			// Adds partial message to the buffer
-			log.Printf("adding %d bytes to buffer for message %s", len(content), id)
-			cli.msgBuffer[id] = append(cli.msgBuffer[id], content...)
-			cli.chunkTracker[id] = chunk
+			log.Printf("adding %d bytes to buffer for message %s", len(ipcmsg.content), ipcmsg.id)
+			cli.msgBuffer[ipcmsg.id] = append(cli.msgBuffer[ipcmsg.id], ipcmsg.content...)
+			cli.chunkTracker[ipcmsg.id] = ipcmsg.chunk
 		} else {
-			log.Printf("chunk %d from %s was already processed, ignoring...", chunk, id)
+			log.Printf("chunk %d from %s was already processed, ignoring...", ipcmsg.chunk, ipcmsg.id)
 		}
 		cli.mutex.Unlock()
 		return nil
 	}
 	// Retrieve the complete message from the buffer
 	var data []byte
-	if total == 1 { // Handle special case chunk == total == 1
-		data = content
+	if ipcmsg.total == 1 { // Handle special case chunk == total == 1
+		data = ipcmsg.content
 	} else {
-		log.Printf("adding %d bytes to final message %s", len(content), id)
+		log.Printf("adding %d bytes to final message %s", len(ipcmsg.content), ipcmsg.id)
 		cli.mutex.RLock()
-		data = append(cli.msgBuffer[id], content...)
+		data = append(cli.msgBuffer[ipcmsg.id], ipcmsg.content...)
 		cli.mutex.RUnlock()
 	}
-	cli.bufferCleanup(id)
-	// Process Flows
-	if cli.IsFlow {
-		msgLog := &telemetry.TelemetryMessageLog{}
-		if err := proto.Unmarshal(data, msgLog); err != nil {
-			log.Printf("warning: invalid telemetry message received: %v", err)
-			return nil
-		}
-		for _, msg := range msgLog.Message {
-			flow := &netflow.FlowMessage{}
-			err := proto.Unmarshal(msg.Bytes, flow)
-			if err != nil {
-				log.Printf("warning: invalid netflow message received: %v", err)
-				return nil
-			}
-			bytes, _ := json.MarshalIndent(flow, "", "  ")
-			return bytes
-		}
-	}
+	cli.bufferCleanup(ipcmsg.id)
 	return data
+}
+
+func (cli *KafkaClient) processTelemetry(data []byte, action ProcessSinkMessage) error {
+	msgLog := &telemetry.TelemetryMessageLog{}
+	if err := proto.Unmarshal(data, msgLog); err != nil {
+		return fmt.Errorf("warning: invalid telemetry message received: %v", err)
+	}
+	for _, msg := range msgLog.Message {
+		flow := &netflow.FlowMessage{}
+		err := proto.Unmarshal(msg.Bytes, flow)
+		if err != nil {
+			return fmt.Errorf("warning: invalid netflow message received: %v", err)
+		}
+		bytes, _ := json.MarshalIndent(flow, "", "  ")
+		action(bytes)
+	}
+	return nil
 }
 
 // Cleans up the chunk buffer. Should be called after successfully processed all chunks.
@@ -176,6 +206,13 @@ func (cli *KafkaClient) bufferCleanup(id string) {
 func (cli *KafkaClient) Initialize() error {
 	if cli.consumer != nil {
 		return fmt.Errorf("consumer already initialized")
+	}
+	if cli.IPC == "" {
+		cli.IPC = "sink"
+	} else {
+		if cli.IPC != "sink" && cli.IPC != "rpc" {
+			return fmt.Errorf("invalid IPC %s. Expected 'sink' or 'rpc'", cli.IPC)
+		}
 	}
 	var err error
 	log.Printf("creating consumer for topic %s at %s", cli.Topic, cli.Bootstrap)
@@ -215,6 +252,10 @@ func (cli *KafkaClient) showStats(sts *kafka.Stats) {
 // Start registers the consumer for the chosen topic, and reads messages from it on an infinite loop.
 // It is recommended to use it within a Go Routine as it is a blocking operation.
 func (cli *KafkaClient) Start(action ProcessSinkMessage) {
+	if cli.consumer == nil {
+		log.Fatal("Consumer not initialized")
+	}
+
 	jsonBytes, _ := json.MarshalIndent(cli, "", "  ")
 	log.Printf("starting kafka consumer: %s", string(jsonBytes))
 
@@ -228,8 +269,14 @@ func (cli *KafkaClient) Start(action ProcessSinkMessage) {
 		case *kafka.Message:
 			if data := cli.processMessage(e); data != nil {
 				cli.msgProcessed.Inc()
-				log.Printf("processing sink message of %d bytes", len(data))
-				action(data)
+				if cli.IsTelemetry {
+					if err := cli.processTelemetry(data, action); err != nil {
+						log.Printf("error processing telemetry message: %v", err)
+					}
+				} else {
+					log.Printf("processing %s message of %d bytes", cli.IPC, len(data))
+					action(data)
+				}
 			}
 			_, err := cli.consumer.CommitMessage(e) // If there are errors on the action, the message won't be reprocessed.
 			if err != nil {

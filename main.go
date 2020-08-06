@@ -25,12 +25,13 @@ func main() {
 	flag.StringVar(&cli.Topic, "topic", "OpenNMS.Sink.Trap", "kafka topic that will receive the messages")
 	flag.StringVar(&cli.GroupID, "group-id", "sink-go-client", "the consumer group ID")
 	flag.Var(&cli.Parameters, "parameter", "Kafka consumer configuration attribute (can be used multiple times)\nfor instance: acks=1")
-	flag.BoolVar(&cli.IsFlow, "is-flow", false, "Set to true if the payload is a Flow message")
+	flag.StringVar(&cli.IPC, "ipc", "sink", "IPC API, either 'sink' or 'rpc'")
+	flag.BoolVar(&cli.IsTelemetry, "is-telemetry", false, "Set to true if the payload is a telemetry message")
 	flag.Parse()
 
 	log.Println("starting consumer")
 	if err := cli.Initialize(); err != nil {
-		panic(err)
+		log.Fatalf("Cannot initialize consumer: %v", err)
 	}
 	log.Println("consumer started")
 

@@ -6,7 +6,7 @@ GROUP_ID=${GROUP_ID-sink-go-client}
 function join { local IFS="$1"; shift; echo "$*"; }
 
 IFS=$'\n'
-CONSUMER=(-parameter "acks=1")
+CONSUMER=()
 for VAR in $(env)
 do
   env_var=$(echo "$VAR" | cut -d= -f1)
@@ -23,8 +23,8 @@ do
 done
 
 OPTIONS=()
-if [ ! -z "${BOOTSTRAP_SERVERS}" ]; then
-  OPTIONS+=(-bootstrap "${BOOTSTRAP_SERVERS}")
+if [ ! -z "${BOOTSTRAP_SERVER}" ]; then
+  OPTIONS+=(-bootstrap "${BOOTSTRAP_SERVES}")
 fi
 if [ ! -z "${GROUP_ID}" ]; then
   OPTIONS+=(-group-id "${GROUP_ID}")
@@ -32,8 +32,12 @@ fi
 if [ ! -z "${TOPIC}" ]; then
   OPTIONS+=(-topic "${TOPIC}")
 fi
-if [ "${IS_FLOW}" == "true" ]; then
-  OPTIONS+=(-is-flow)
+if [ ! -z "${IPC}" ]; then
+  OPTIONS+=(-ipc "${IPC}")
+fi
+if [ "${IS_TELEMETRY}" == "true" ]; then
+  OPTIONS+=(-is-telemetry)
 fi
 
+echo "Starting sink-receiver with: ${OPTIONS[@]} ${CONSUMER[@]}"
 exec /sink-receiver ${OPTIONS[@]} ${CONSUMER[@]}
