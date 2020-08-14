@@ -14,7 +14,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/agalue/sink-receiver/client"
+	"github.com/agalue/onms-kafka-ipc-receiver/client"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
