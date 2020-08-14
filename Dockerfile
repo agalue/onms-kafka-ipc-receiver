@@ -5,7 +5,7 @@ RUN mkdir /app && \
     apk add --no-cache alpine-sdk git librdkafka-dev@edgecommunity
 ADD ./ /app/
 WORKDIR /app
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -tags musl -a -o sink-receiver
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -tags musl -a -o onms-kafka-ipc-receiver
 
 FROM alpine
 RUN echo "@edgecommunity http://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories && \
@@ -13,7 +13,7 @@ RUN echo "@edgecommunity http://dl-cdn.alpinelinux.org/alpine/edge/community" >>
     apk add --no-cache bash librdkafka@edgecommunity && \
     rm -rf /var/cache/apk/* && \
     addgroup -S onms && adduser -S -G onms onms
-COPY --from=builder /app/sink-receiver /sink-receiver
+COPY --from=builder /app/onms-kafka-ipc-receiver /onms-kafka-ipc-receiver
 COPY ./docker-entrypoint.sh /
 USER onms
 LABEL maintainer="Alejandro Galue <agalue@opennms.org>" \

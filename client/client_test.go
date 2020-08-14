@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agalue/sink-receiver/protobuf/sink"
+	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/sink"
 	"github.com/golang/protobuf/proto"
 	"github.com/prometheus/client_golang/prometheus"
 	"gopkg.in/confluentinc/confluent-kafka-go.v1/kafka"

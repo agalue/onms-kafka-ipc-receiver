@@ -39,5 +39,5 @@ if [ "${IS_TELEMETRY}" == "true" ]; then
   OPTIONS+=(-is-telemetry)
 fi
 
-echo "Starting sink-receiver with: ${OPTIONS[@]} ${CONSUMER[@]}"
-exec /sink-receiver ${OPTIONS[@]} ${CONSUMER[@]}
+echo "Starting onms-kafka-ipc-receiver with: ${OPTIONS[@]} ${CONSUMER[@]}"
+exec /onms-kafka-ipc-receiver ${OPTIONS[@]} ${CONSUMER[@]}
