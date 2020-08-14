@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/netflow"
 	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/rpc"
 	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/sink"
 	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/telemetry"
@@ -181,13 +180,7 @@ func (cli *KafkaClient) processTelemetry(data []byte, action ProcessSinkMessage)
 		return fmt.Errorf("warning: invalid telemetry message received: %v", err)
 	}
 	for _, msg := range msgLog.Message {
-		flow := &netflow.FlowMessage{}
-		err := proto.Unmarshal(msg.Bytes, flow)
-		if err != nil {
-			return fmt.Errorf("warning: invalid netflow message received: %v", err)
-		}
-		bytes, _ := json.MarshalIndent(flow, "", "  ")
-		action(bytes)
+		action(msg.Bytes)
 	}
 	return nil
 }

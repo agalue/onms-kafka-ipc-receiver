@@ -17,6 +17,7 @@ When using Docker:
 * `IPC` the IPC message kind to process. Either `rpc` or `sink` is allowed (defaults to `sink`).
 * `TOPIC` environment variable with the source Sink API Kafka Topic with GPB Payload.
 * `IS_TELEMETRY` set this environment variable to `true` to instructs the client to parse the payload as Telemetry data (used only when `IPC=sink`).
+* `IS_NETFLOW` set this environment variable to `true` to instructs the client to parse the telemetry payload as Netflow data (used only when `IPC=sink` and `IS_TELEMETRY=true`).
 * `GROUP_ID` environment variable with the Consumer Group ID (defaults to `opennms`)
 * To pass consumer settings, add an environment variable with the prefix `KAFKA_`, for example: `KAFKA_AUTO_OFFSET_RESET`.
 

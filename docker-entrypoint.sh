@@ -38,6 +38,9 @@ fi
 if [ "${IS_TELEMETRY}" == "true" ]; then
   OPTIONS+=(-is-telemetry)
 fi
+if [ "${IS_NETFLOW}" == "true" ]; then
+  OPTIONS+=(-is-netflow)
+fi
 
 echo "Starting onms-kafka-ipc-receiver with: ${OPTIONS[@]} ${CONSUMER[@]}"
 exec /onms-kafka-ipc-receiver ${OPTIONS[@]} ${CONSUMER[@]}

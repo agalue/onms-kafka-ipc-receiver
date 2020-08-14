@@ -17,5 +17,5 @@ COPY --from=builder /app/onms-kafka-ipc-receiver /onms-kafka-ipc-receiver
 COPY ./docker-entrypoint.sh /
 USER onms
 LABEL maintainer="Alejandro Galue <agalue@opennms.org>" \
-      name="OpenNMS Sink API Receiver"
+      name="OpenNMS Kafka IPC API Receiver"
 ENTRYPOINT [ "/docker-entrypoint.sh" ]
