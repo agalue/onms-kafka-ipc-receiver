@@ -3,13 +3,20 @@
 package client
 
 import (
+	"encoding/base64"
+	"encoding/xml"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/flowdocument"
+	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/netflow"
 	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/sink"
+	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/telemetry"
 	"github.com/golang/protobuf/proto"
+	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/prometheus/client_golang/prometheus"
 	"gopkg.in/confluentinc/confluent-kafka-go.v1/kafka"
 	"gotest.tools/assert"
@@ -95,14 +102,141 @@ func TestClient(t *testing.T) {
 	cli := createKafkaClient(mock)
 	var message string
 	go func() {
-		cli.Start(func(msg []byte) {
-			fmt.Printf("%s\n", string(msg))
+		cli.Start(func(key, msg []byte) {
+			fmt.Printf("Key %s, Value: %s\n", string(key), string(msg))
 			message = string(msg)
 		})
 	}()
 	mock.Send(buildMessage("001", 0, 1, []byte("This is a test")))
 	time.Sleep(1 * time.Second)
 	assert.Equal(t, "This is a test", message)
+	cli.Stop()
+}
+
+func TestSyslogParser(t *testing.T) {
+	mock := &mockConsumer{
+		msgChannel: make(chan *kafka.Message, 1),
+	}
+	cli := createKafkaClient(mock)
+	cli.Parser = "syslog"
+	var message string
+	go func() {
+		cli.Start(func(key, msg []byte) {
+			fmt.Printf("Key %s, Value: %s\n", string(key), string(msg))
+			message = string(msg)
+		})
+	}()
+	dto := SyslogMessageLogDTO{
+		Location:      "Test",
+		SourceAddress: "10.0.0.1",
+		SourcePort:    514,
+		Messages: []SyslogMessageDTO{
+			{
+				Timestamp: time.Now().String(),
+				Content:   []byte(base64.StdEncoding.EncodeToString([]byte("This is a test"))),
+			},
+		},
+	}
+	data, err := xml.Marshal(dto)
+	assert.NilError(t, err)
+
+	mock.Send(buildMessage("001", 0, 1, data))
+	time.Sleep(1 * time.Second)
+	assert.Assert(t, strings.Contains(message, "This is a test"))
+	cli.Stop()
+}
+
+func TestNetflowParser(t *testing.T) {
+	mock := &mockConsumer{
+		msgChannel: make(chan *kafka.Message, 1),
+	}
+	cli := createKafkaClient(mock)
+	cli.Parser = "netflow"
+	var message string
+	go func() {
+		cli.Start(func(key, msg []byte) {
+			fmt.Printf("Key %s, Value: %s\n", string(key), string(msg))
+			message = string(msg)
+		})
+	}()
+
+	ts := uint64(time.Now().Unix())
+	netflow := &netflow.FlowMessage{
+		NetflowVersion: netflow.NetflowVersion_V9,
+		Direction:      netflow.Direction_EGRESS,
+		Timestamp:      ts,
+		DeltaSwitched:  &wrappers.UInt64Value{Value: ts},
+		FirstSwitched:  &wrappers.UInt64Value{Value: ts},
+		LastSwitched:   &wrappers.UInt64Value{Value: ts + 1},
+		SrcAddress:     "11.0.0.1",
+		DstAddress:     "12.0.0.2",
+		NumBytes:       &wrappers.UInt64Value{Value: 1000},
+	}
+	netflowBytes, err := proto.Marshal(netflow)
+	assert.NilError(t, err)
+	location := "Test"
+	systemID := "001"
+	source := "10.0.0.1"
+	port := uint32(8877)
+	telemetryMsg := &telemetry.TelemetryMessageLog{
+		Location:      &location,
+		SystemId:      &systemID,
+		SourceAddress: &source,
+		SourcePort:    &port,
+		Message: []*telemetry.TelemetryMessage{
+			{
+				Timestamp: &ts,
+				Bytes:     netflowBytes,
+			},
+		},
+	}
+	data, err := proto.Marshal(telemetryMsg)
+	assert.NilError(t, err)
+
+	mock.Send(buildMessage("001", 0, 1, data))
+	time.Sleep(1 * time.Second)
+	assert.Assert(t, strings.Contains(message, "12.0.0.2"))
+	cli.Stop()
+}
+
+func TestFlowDocumentParser(t *testing.T) {
+	mock := &mockConsumer{
+		msgChannel: make(chan *kafka.Message, 1),
+	}
+	cli := createKafkaClient(mock)
+	cli.Parser = "flowdocument"
+	var message string
+	go func() {
+		cli.Start(func(key, msg []byte) {
+			fmt.Printf("Key %s, Value: %s\n", string(key), string(msg))
+			message = string(msg)
+		})
+	}()
+
+	ts := uint64(time.Now().Unix())
+	doc := &flowdocument.FlowDocument{
+		NetflowVersion: flowdocument.NetflowVersion_V9,
+		Direction:      flowdocument.Direction_EGRESS,
+		Timestamp:      ts,
+		DeltaSwitched:  &wrappers.UInt64Value{Value: ts},
+		FirstSwitched:  &wrappers.UInt64Value{Value: ts},
+		LastSwitched:   &wrappers.UInt64Value{Value: ts + 1},
+		SrcAddress:     "11.0.0.1",
+		DstAddress:     "12.0.0.2",
+		NumBytes:       &wrappers.UInt64Value{Value: 1000},
+		ExporterNode: &flowdocument.NodeInfo{
+			ForeignSource: "MockFS",
+			ForeginId:     "001",
+			NodeId:        2,
+		},
+	}
+	data, err := proto.Marshal(doc)
+	assert.NilError(t, err)
+
+	mock.Send(buildMessage("001", 0, 1, data))
+	time.Sleep(1 * time.Second)
+	assert.Assert(t, strings.Contains(message, "MockFS"))
+	assert.Assert(t, strings.Contains(message, "12.0.0.2"))
 	cli.Stop()
 }
 

@@ -35,11 +35,8 @@ fi
 if [ ! -z "${IPC}" ]; then
   OPTIONS+=(-ipc "${IPC}")
 fi
-if [ "${IS_TELEMETRY}" == "true" ]; then
-  OPTIONS+=(-is-telemetry)
-fi
-if [ "${IS_NETFLOW}" == "true" ]; then
-  OPTIONS+=(-is-netflow)
+if [ ! -z "${PARSER}" ]; then
+  OPTIONS+=(-parser "${PARSER}")
 fi
 
 echo "Starting onms-kafka-ipc-receiver with: ${OPTIONS[@]} ${CONSUMER[@]}"
