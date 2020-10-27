@@ -20,6 +20,8 @@ import (
 
 // The main function
 func main() {
+	log.SetOutput(os.Stdout)
+
 	cli := client.KafkaClient{}
 	flag.StringVar(&cli.Bootstrap, "bootstrap", "localhost:9092", "kafka bootstrap server")
 	flag.StringVar(&cli.Topic, "topic", "OpenNMS.Sink.Trap", "kafka topic that will receive the messages")
