@@ -2,6 +2,8 @@
 
 syntax = "proto3";
 
+package netflow;
+
 option go_package = ".;netflow";
 
 import "google/protobuf/wrappers.proto";

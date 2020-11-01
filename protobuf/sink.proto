@@ -1,5 +1,7 @@
 syntax = "proto2";
 
+package sink;
+
 option go_package = ".;sink";
 
 message TracingInfo {
