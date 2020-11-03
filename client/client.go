@@ -25,7 +25,6 @@ import (
 type KafkaConsumer interface {
 	Subscribe(topic string, rebalanceCb kafka.RebalanceCb) error
 	Poll(timeoutMs int) (event kafka.Event)
-	CommitMessage(m *kafka.Message) ([]kafka.TopicPartition, error)
 	Close() (err error)
 }
 
@@ -226,12 +225,12 @@ func (cli *KafkaClient) processPayload(key, data []byte, action ProcessSinkMessa
 		}
 		action(key, []byte(syslog.String()))
 	} else if cli.isSnmp() {
-		syslog := &TrapLogDTO{}
-		if err := xml.Unmarshal(data, syslog); err != nil {
+		trap := &TrapLogDTO{}
+		if err := xml.Unmarshal(data, trap); err != nil {
 			log.Printf("[warn] invalid snmp trap message received: %v", err)
 			return
 		}
-		action(key, []byte(syslog.String()))
+		action(key, []byte(trap.String()))
 	} else {
 		action(key, data)
 	}
@@ -314,10 +313,6 @@ func (cli *KafkaClient) Start(action ProcessSinkMessage) {
 			log.Printf("[info] received message of %d bytes at %v", len(e.Value), e.TopicPartition)
 			if data := cli.processMessage(e); data != nil {
 				cli.processPayload(e.Key, data, action)
-			}
-			_, err := cli.consumer.CommitMessage(e) // If there are errors on the action, the message won't be reprocessed.
-			if err != nil {
-				log.Printf("[warn] error committing message: %v", err)
 			}
 		case kafka.Error:
 			log.Printf("[warn] consumer error %v", e)

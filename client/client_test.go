@@ -37,10 +37,6 @@ func (mock *mockConsumer) Poll(timeoutMs int) (event kafka.Event) {
 	return <-mock.msgChannel
 }
 
-func (mock *mockConsumer) CommitMessage(m *kafka.Message) ([]kafka.TopicPartition, error) {
-	return []kafka.TopicPartition{}, nil
-}
-
 func (mock *mockConsumer) Close() (err error) {
 	return nil
 }
@@ -165,23 +161,22 @@ func TestSnmpParser(t *testing.T) {
 		Messages: []TrapDTO{
 			{
 				AgentAddress: "172.16.0.1",
-				Version:      "2c",
+				Version:      "v2",
 				Community:    "public",
 				CreationTime: time.Now().Unix(),
 				Timestamp:    time.Now().Unix(),
-				PDULength:    10,
+				PDULength:    3,
 				TrapIdentity: &TrapIdentityDTO{
 					EnterpriseID: ".1.3.6.1.4.1.666.1",
 					Generic:      6,
-					Specific:     0,
+					Specific:     1,
 				},
 				Results: &SNMPResults{
 					Results: []SNMPResultDTO{
 						{
-							Base:     ".1.3.6.1.4.1.666.1.1",
-							Instance: "1",
+							Base: ".1.3.6.1.4.1.666.2.1.1",
 							Value: SNMPValueDTO{
-								Type:  1,
+								Type:  4,
 								Value: base64.StdEncoding.EncodeToString([]byte("This is a test")),
 							},
 						},
@@ -285,7 +280,11 @@ func buildMessage(id string, chunk, total int32, data []byte) *kafka.Message {
 
 func createKafkaClient(mock *mockConsumer) *KafkaClient {
 	cli := &KafkaClient{
-		consumer: mock,
+		Bootstrap: "127.0.0.1:9092",
+		Topic:     "Test",
+		GroupID:   "Test",
+		IPC:       "sink",
+		consumer:  mock,
 	}
 	cli.createVariables()
 	cli.chunkProcessed = prometheus.NewCounter(prometheus.CounterOpts{

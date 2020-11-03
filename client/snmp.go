@@ -24,7 +24,7 @@ func (dto SNMPValueDTO) MarshalJSON() ([]byte, error) {
 type SNMPResultDTO struct {
 	XMLName  xml.Name     `xml:"result" json:"-"`
 	Base     string       `xml:"base" json:"base"`
-	Instance string       `xml:"instance" json:"instance"`
+	Instance string       `xml:"instance" json:"instance,omitempty"`
 	Value    SNMPValueDTO `xml:"value" json:"value"`
 }
 
@@ -43,12 +43,12 @@ type TrapIdentityDTO struct {
 // TrapDTO represents an SNMP Trap
 type TrapDTO struct {
 	AgentAddress string           `xml:"agent-address" json:"agentAddress"`
-	Community    string           `xml:"community" json:"community"`
+	Community    string           `xml:"community" json:"community,omitempty"`
 	Version      string           `xml:"version" json:"version"`
 	Timestamp    int64            `xml:"timestamp" json:"timestamp"`
 	CreationTime int64            `xml:"creation-time" json:"creationTime"`
 	PDULength    int              `xml:"pdu-length" json:"pduLength"`
-	RawMessage   []byte           `xml:"raw-message,omitempty" json:"rawMessage"`
+	RawMessage   []byte           `xml:"raw-message,omitempty" json:"rawMessage,omitempty"`
 	TrapIdentity *TrapIdentityDTO `xml:"trap-identity" json:"trapIdentity"`
 	Results      *SNMPResults     `xml:"results" json:"results"`
 }
