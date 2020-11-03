@@ -28,7 +28,7 @@ func main() {
 	flag.StringVar(&cli.GroupID, "group-id", "sink-go-client", "the consumer group ID")
 	flag.Var(&cli.Parameters, "parameter", "Kafka consumer configuration attribute (can be used multiple times)\nfor instance: acks=1")
 	flag.StringVar(&cli.IPC, "ipc", "sink", "IPC API: sink, rpc")
-	flag.StringVar(&cli.Parser, "parser", "", "Sink API Parser: syslog, snmp, netflow, flowdocument")
+	flag.StringVar(&cli.Parser, "parser", "", "Sink API Parser: syslog, snmp, netflow")
 	flag.Parse()
 
 	log.Println("starting consumer")

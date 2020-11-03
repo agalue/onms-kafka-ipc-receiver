@@ -11,7 +11,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/flowdocument"
 	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/netflow"
 	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/rpc"
 	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/sink"
@@ -62,7 +61,7 @@ type KafkaClient struct {
 	GroupID    string      // The name of the Consumer Group ID.
 	Parameters Propertites // List of Kafka Consumer Parameters.
 	IPC        string      // options: rpc, sink.
-	Parser     string      // options: syslog, snmp, netflow, flowdocument
+	Parser     string      // options: syslog, snmp, netflow, sflow
 
 	consumer     KafkaConsumer
 	msgBuffer    map[string][]byte
@@ -144,16 +143,6 @@ func (cli *KafkaClient) getIpcMessage(msg *kafka.Message) (*ipcMessage, error) {
 // Processes a Kafka message. It return a non-empty slice when the message is complete, otherwise returns nil.
 // This is a concurrent safe method.
 func (cli *KafkaClient) processMessage(msg *kafka.Message) []byte {
-	// Process non-IPC Messages
-	if cli.isFlowDocument() {
-		flow := &flowdocument.FlowDocument{}
-		if err := proto.Unmarshal(msg.Value, flow); err != nil {
-			log.Printf("[warn] invalid netflow enriched document message received: %v", err)
-			return nil
-		}
-		bytes, _ := json.MarshalIndent(flow, "", "  ")
-		return bytes
-	}
 	// Process IPC Messages
 	cli.chunkProcessed.Inc()
 	ipcmsg, err := cli.getIpcMessage(msg)
@@ -207,10 +196,6 @@ func (cli *KafkaClient) isSnmp() bool {
 	return strings.ToLower(cli.Parser) == "snmp"
 }
 
-func (cli *KafkaClient) isFlowDocument() bool {
-	return strings.ToLower(cli.Parser) == "flowdocument"
-}
-
 func (cli *KafkaClient) processPayload(key, data []byte, action ProcessSinkMessage) {
 	if cli.isTelemetry() {
 		msgLog := &telemetry.TelemetryMessageLog{}
@@ -237,6 +222,13 @@ func (cli *KafkaClient) processPayload(key, data []byte, action ProcessSinkMessa
 		syslog := &SyslogMessageLogDTO{}
 		if err := xml.Unmarshal(data, syslog); err != nil {
 			log.Printf("[warn] invalid syslog message received: %v", err)
+			return
+		}
+		action(key, []byte(syslog.String()))
+	} else if cli.isSnmp() {
+		syslog := &TrapLogDTO{}
+		if err := xml.Unmarshal(data, syslog); err != nil {
+			log.Printf("[warn] invalid snmp trap message received: %v", err)
 			return
 		}
 		action(key, []byte(syslog.String()))
