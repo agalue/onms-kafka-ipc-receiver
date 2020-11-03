@@ -1,3 +1,5 @@
+// @author Alejandro Galue <agalue@opennms.org>
+
 package client
 
 import (
@@ -5,18 +7,30 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"log"
+	"math/big"
 )
 
 // SNMPValueDTO represents an SNMP value
 type SNMPValueDTO struct {
 	XMLName xml.Name `xml:"value" json:"-"`
 	Type    int      `xml:"type,attr" json:"type"`
-	Value   string   `xml:",chardata" json:"value"`
+	Value   string   `xml:",chardata" json:"content"`
 }
 
 // MarshalJSON converts SNMP Value to JSON
 func (dto SNMPValueDTO) MarshalJSON() ([]byte, error) {
-	content, _ := base64.StdEncoding.DecodeString(string(dto.Value))
+	data, err := base64.StdEncoding.DecodeString(string(dto.Value))
+	var content string = string(dto.Value)
+	if dto.Type == 4 {
+		if err == nil {
+			content = string(data)
+		} else {
+			log.Printf("[error] cannot decode base64 value: %v", err)
+		}
+	} else {
+		content = new(big.Int).SetBytes(data).String()
+	}
 	return []byte(fmt.Sprintf(`{"type": %d, "value": "%s"}`, dto.Type, content)), nil
 }
 
@@ -24,7 +38,7 @@ func (dto SNMPValueDTO) MarshalJSON() ([]byte, error) {
 type SNMPResultDTO struct {
 	XMLName  xml.Name     `xml:"result" json:"-"`
 	Base     string       `xml:"base" json:"base"`
-	Instance string       `xml:"instance" json:"instance,omitempty"`
+	Instance string       `xml:"instance,omitempty" json:"instance,omitempty"`
 	Value    SNMPValueDTO `xml:"value" json:"value"`
 }
 
@@ -63,6 +77,9 @@ type TrapLogDTO struct {
 }
 
 func (dto TrapLogDTO) String() string {
-	bytes, _ := json.MarshalIndent(dto, "", "  ")
+	bytes, err := json.MarshalIndent(dto, "", "  ")
+	if err != nil {
+		log.Printf("[error] cannot generate JSON for SNMP trap: %v", err)
+	}
 	return string(bytes)
 }

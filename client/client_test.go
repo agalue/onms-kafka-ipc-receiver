@@ -121,6 +121,7 @@ func TestSyslogParser(t *testing.T) {
 			message = string(msg)
 		})
 	}()
+
 	dto := SyslogMessageLogDTO{
 		Location:      "Test",
 		SourceAddress: "10.0.0.1",
@@ -154,6 +155,7 @@ func TestSnmpParser(t *testing.T) {
 			message = string(msg)
 		})
 	}()
+
 	dto := TrapLogDTO{
 		Location:    "Test",
 		TrapAddress: "10.0.0.1",
@@ -222,6 +224,7 @@ func TestNetflowParser(t *testing.T) {
 	}
 	netflowBytes, err := proto.Marshal(netflow)
 	assert.NilError(t, err)
+
 	location := "Test"
 	systemID := "001"
 	source := "10.0.0.1"

@@ -21,6 +21,11 @@ import (
 	"gopkg.in/confluentinc/confluent-kafka-go.v1/kafka"
 )
 
+// AvailableParsers list of available parsers
+var AvailableParsers = &EnumValue{
+	Enum: []string{"snmp", "syslog", "netflow", "sflow"},
+}
+
 // KafkaConsumer creates an generic interface with the relevant methods from kafka.Consumer
 type KafkaConsumer interface {
 	Subscribe(topic string, rebalanceCb kafka.RebalanceCb) error
@@ -196,6 +201,7 @@ func (cli *KafkaClient) isSnmp() bool {
 }
 
 func (cli *KafkaClient) processPayload(key, data []byte, action ProcessSinkMessage) {
+	// log.Printf("[debug] received %s", string(data))
 	if cli.isTelemetry() {
 		msgLog := &telemetry.TelemetryMessageLog{}
 		if err := proto.Unmarshal(data, msgLog); err != nil {
@@ -232,7 +238,7 @@ func (cli *KafkaClient) processPayload(key, data []byte, action ProcessSinkMessa
 		}
 		action(key, []byte(trap.String()))
 	} else {
-		action(key, data)
+		log.Printf("[error] invalid parser %s, ignoring payload", cli.Parser)
 	}
 }
 
@@ -254,7 +260,12 @@ func (cli *KafkaClient) Initialize() error {
 		cli.IPC = "sink"
 	} else {
 		if cli.IPC != "sink" && cli.IPC != "rpc" {
-			return fmt.Errorf("invalid IPC %s. Expected 'sink' or 'rpc'", cli.IPC)
+			return fmt.Errorf("invalid IPC %s. Expected sink, rpc", cli.IPC)
+		}
+	}
+	if cli.Parser != "" {
+		if err := AvailableParsers.Set(cli.Parser); err != nil {
+			return fmt.Errorf("invalid Sink parser %s. Expected %s", cli.Parser, AvailableParsers.EnumAsString())
 		}
 	}
 	var err error

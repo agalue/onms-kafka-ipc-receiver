@@ -1,3 +1,5 @@
+// @author Alejandro Galue <agalue@opennms.org>
+
 package client
 
 import (
@@ -5,6 +7,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"log"
 )
 
 // SyslogMessageDTO represents a Syslog message
@@ -15,8 +18,11 @@ type SyslogMessageDTO struct {
 
 // MarshalJSON converts Syslog message to JSON
 func (dto *SyslogMessageDTO) MarshalJSON() ([]byte, error) {
-	content, _ := base64.StdEncoding.DecodeString(string(dto.Content))
-	return []byte(fmt.Sprintf(`{"timestamp": "%s", "content": "%s"}`, dto.Timestamp, content)), nil
+	content, err := base64.StdEncoding.DecodeString(string(dto.Content))
+	if err != nil {
+		log.Printf("[error] cannot decode base64 value: %v", err)
+	}
+	return []byte(fmt.Sprintf(`{"timestamp": "%s", "content": "%s"}`, dto.Timestamp, string(content))), nil
 }
 
 // SyslogMessageLogDTO represents a collection of Syslog messages
@@ -30,6 +36,9 @@ type SyslogMessageLogDTO struct {
 }
 
 func (dto SyslogMessageLogDTO) String() string {
-	bytes, _ := json.MarshalIndent(dto, "", "  ")
+	bytes, err := json.MarshalIndent(dto, "", "  ")
+	if err != nil {
+		log.Printf("[error] cannot generate JSON for syslog message: %v", err)
+	}
 	return string(bytes)
 }
