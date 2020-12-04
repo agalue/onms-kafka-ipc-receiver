@@ -267,9 +267,9 @@ func runProcessMessageTest(t *testing.T, wg *sync.WaitGroup, cli *KafkaClient, i
 func buildMessage(id string, chunk, total int32, data []byte) *kafka.Message {
 	topic := "Test"
 	sinkMsg := &sink.SinkMessage{
-		MessageId:          &id,
-		CurrentChunkNumber: &chunk,
-		TotalChunks:        &total,
+		MessageId:          id,
+		CurrentChunkNumber: chunk,
+		TotalChunks:        total,
 		Content:            data,
 	}
 	bytes, _ := proto.Marshal(sinkMsg)
