@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"strings"
 )
 
 // SNMPValueDTO represents an SNMP value
@@ -18,17 +19,35 @@ type SNMPValueDTO struct {
 	Value   string   `xml:",chardata" json:"content"`
 }
 
+func (dto SNMPValueDTO) isASCII(s string) bool {
+	for _, c := range s {
+		if c > 127 {
+			return false
+		}
+	}
+	return true
+}
+
 // MarshalJSON converts SNMP Value to JSON
 func (dto SNMPValueDTO) MarshalJSON() ([]byte, error) {
 	data, err := base64.StdEncoding.DecodeString(string(dto.Value))
 	var content string = string(dto.Value)
-	if dto.Type == 4 {
+	if dto.Type == 4 || dto.Type == 6 { // OCTETSTRING(4), OID(6)
 		if err == nil {
 			content = string(data)
+			if !dto.isASCII(content) { // TODO parse hex-content
+				content = fmt.Sprintf("0x%x", string(data))
+			}
 		} else {
 			log.Printf("[error] cannot decode base64 value: %v", err)
 		}
-	} else {
+	} else if dto.Type == 64 { // IPADDRESS
+		elements := make([]string, len(data))
+		for i, n := range data {
+			elements[i] = new(big.Int).SetBytes([]byte{n}).String()
+		}
+		content = strings.Join(elements, ".")
+	} else { // Assume numeric value
 		content = new(big.Int).SetBytes(data).String()
 	}
 	return []byte(fmt.Sprintf(`{"type": %d, "value": "%s"}`, dto.Type, content)), nil
