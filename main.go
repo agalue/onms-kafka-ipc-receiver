@@ -18,9 +18,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-// The main function
 func main() {
 	log.SetOutput(os.Stdout)
+	promPort := 8181
 
 	cli := client.KafkaClient{}
 	flag.StringVar(&cli.Bootstrap, "bootstrap", "localhost:9092", "kafka bootstrap server")
@@ -29,6 +29,7 @@ func main() {
 	flag.Var(&cli.Parameters, "parameter", "Kafka consumer configuration attribute (can be used multiple times)\nfor instance: acks=1")
 	flag.StringVar(&cli.IPC, "ipc", "sink", "IPC API: sink, rpc")
 	flag.StringVar(&cli.Parser, "parser", "snmp", "Sink API Parser: "+client.AvailableParsers.EnumAsString())
+	flag.IntVar(&promPort, "prometheus-port", promPort, "Port to export Prometheus metrics")
 	flag.Parse()
 
 	log.Println("starting consumer")
@@ -42,10 +43,9 @@ func main() {
 	})
 
 	go func() {
-		port := 8181
-		log.Printf("Starting Prometheus Metrics Server on port %d", port)
+		log.Printf("Starting Prometheus Metrics Server on port %d", promPort)
 		http.Handle("/metrics", promhttp.Handler())
-		http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+		http.ListenAndServe(fmt.Sprintf(":%d", promPort), nil)
 	}()
 
 	stop := make(chan os.Signal, 1)
