@@ -37,11 +37,8 @@ docker push agalue/onms-kafka-ipc-receiver:latest
 
 > *NOTE*: Please use your own Docker Hub account or use the image provided on my account.
 
-To build the controller locally for testing:
+To build the controller locally, make sure you have [Go](https://golang.org/) 1.16 installed on your machine, then:
 
 ```bash
-export GO111MODULE="on"
-
 go build
-./onms-kafka-ipc-receiver
 ```
