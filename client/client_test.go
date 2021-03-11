@@ -90,24 +90,6 @@ func TestProcessMultipleMessages(t *testing.T) {
 	wg.Wait()
 }
 
-func TestClient(t *testing.T) {
-	mock := &mockConsumer{
-		msgChannel: make(chan *kafka.Message, 1),
-	}
-	cli := createKafkaClient(mock)
-	var message string
-	go func() {
-		cli.Start(func(key, msg []byte) {
-			fmt.Printf("Key %s, Value: %s\n", string(key), string(msg))
-			message = string(msg)
-		})
-	}()
-	mock.Send(buildMessage("001", 0, 1, []byte("This is a test")))
-	time.Sleep(1 * time.Second)
-	assert.Equal(t, "This is a test", message)
-	cli.Stop()
-}
-
 func TestSyslogParser(t *testing.T) {
 	mock := &mockConsumer{
 		msgChannel: make(chan *kafka.Message, 1),

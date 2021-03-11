@@ -3,6 +3,7 @@ package client
 import (
 	"encoding/xml"
 	"fmt"
+	"strings"
 	"testing"
 
 	"gotest.tools/assert"
@@ -33,5 +34,11 @@ func TestSnmp(t *testing.T) {
 	trap := new(TrapLogDTO)
 	err := xml.Unmarshal(data, trap)
 	assert.NilError(t, err)
-	fmt.Println(trap.String())
+	text := trap.String()
+
+	fmt.Println(text)
+	assert.Equal(t, "agalue-mbp.local", trap.SystemID)
+	assert.Equal(t, 1, len(trap.Messages))
+	assert.Assert(t, strings.Contains(text, "\"value\": \"something went wrong.\""))
+	assert.Assert(t, strings.Contains(text, "\"value\": \"5\""))
 }

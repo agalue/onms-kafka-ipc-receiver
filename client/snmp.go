@@ -44,7 +44,7 @@ type SNMPResultDTO struct {
 
 // SNMPResults represents a collection of SNMP result instances
 type SNMPResults struct {
-	Results []SNMPResultDTO `xml:"result" json:"results"`
+	Results []SNMPResultDTO `xml:"result" json:"varbinds"`
 }
 
 // TrapIdentityDTO represents the SNMP Trap Identity
