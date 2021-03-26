@@ -39,7 +39,7 @@ func main() {
 	log.Println("consumer started")
 
 	go cli.Start(func(key, msg []byte) {
-		log.Printf("Key: %s, Value: %s", string(key), string(msg))
+		log.Printf("Key: %s, Value:\n%s", string(key), string(msg))
 	})
 
 	go func() {

@@ -8,6 +8,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"log"
+	"strings"
 )
 
 // SyslogMessageDTO represents a Syslog message
@@ -18,11 +19,12 @@ type SyslogMessageDTO struct {
 
 // MarshalJSON converts Syslog message to JSON
 func (dto *SyslogMessageDTO) MarshalJSON() ([]byte, error) {
-	content, err := base64.StdEncoding.DecodeString(string(dto.Content))
+	bytes, err := base64.StdEncoding.DecodeString(string(dto.Content))
+	content := strings.TrimSuffix(string(bytes), "\n")
 	if err != nil {
 		log.Printf("[error] cannot decode base64 value: %v", err)
 	}
-	return []byte(fmt.Sprintf(`{"timestamp": "%s", "content": "%s"}`, dto.Timestamp, string(content))), nil
+	return []byte(fmt.Sprintf(`{"timestamp": "%s", "content": "%s"}`, dto.Timestamp, content)), nil
 }
 
 // SyslogMessageLogDTO represents a collection of Syslog messages
