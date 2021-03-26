@@ -39,13 +39,31 @@ docker push agalue/onms-kafka-ipc-receiver:latest
 
 > *NOTE*: Please use your own Docker Hub account or use the image provided on my account.
 
-To build the applicatoin locally, make sure you have [Go](https://golang.org/) 1.16 installed on your machine, as well as [librdkafka](https://github.com/edenhill/librdkafka);then:
+To build the applicatoin locally, make sure you have [Go](https://golang.org/) 1.16 and the latest [librdkafka](https://github.com/edenhill/librdkafka) installed on your machine, then:
 
 ```bash
 go build
 ```
 
 ## Sample Output
+
+### Heartbeat (Sink API)
+
+To run the parser:
+
+```bash
+onms-kafka-ipc-receiver -bootstrap kafka:9092 -ipc sink -parser heartbeat -topic OpenNMS.Sink.Heartbeat
+```
+
+The Protobuf payload is parsed and the tool prints a human-readable representation of it in XML:
+
+```xml
+<minion>
+  <id>minion01</id>
+  <location>Apex</location>
+  <timestamp>2021-03-26T14:42:53.803-04:00</timestamp>
+</minion>
+```
 
 ### Syslog (Sink API)
 
@@ -58,6 +76,18 @@ onms-kafka-ipc-receiver -bootstrap kafka:9092 -ipc sink -parser syslog -topic Op
 The Protobuf payload is parsed and the tool prints a human-readable representation of it in JSON:
 
 ```json
+{
+  "systemId": "minion01",
+  "location": "Apex",
+  "sourceAddress": "192.168.75.1",
+  "sourcePort": 60209,
+  "messages": [
+    {
+      "timestamp": "2021-03-26T14:49:27.734-04:00",
+      "content": "\u003c190\u003e2021-03-26T14:49:27-04:00 agalue-mbp.local udpgen[9601]: %%SEC-6-IPACCESSLOGP: list in110 denied tcp 10.99.99.1(63923) -\u003e 10.98.98.1(1521), 1 packet"
+    }
+  ]
+}
 ```
 
 ### SNMP Traps (Sink API)
