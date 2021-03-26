@@ -23,7 +23,7 @@ import (
 
 // AvailableParsers list of available parsers
 var AvailableParsers = &EnumValue{
-	Enum: []string{"snmp", "syslog", "netflow", "sflow"},
+	Enum: []string{"heartbeat", "snmp", "syslog", "netflow", "sflow"},
 }
 
 // KafkaConsumer creates an generic interface with the relevant methods from kafka.Consumer
@@ -200,6 +200,10 @@ func (cli *KafkaClient) isSnmp() bool {
 	return strings.ToLower(cli.Parser) == "snmp"
 }
 
+func (cli *KafkaClient) isHeartbeat() bool {
+	return strings.ToLower(cli.Parser) == "heartbeat"
+}
+
 func (cli *KafkaClient) processPayload(key, data []byte, action ProcessSinkMessage) {
 	// log.Printf("[debug] received %s", string(data))
 	if cli.isTelemetry() {
@@ -237,6 +241,8 @@ func (cli *KafkaClient) processPayload(key, data []byte, action ProcessSinkMessa
 			return
 		}
 		action(key, []byte(trap.String()))
+	} else if cli.isHeartbeat() {
+		action(key, data)
 	} else {
 		log.Printf("[error] invalid parser %s, ignoring payload", cli.Parser)
 	}
