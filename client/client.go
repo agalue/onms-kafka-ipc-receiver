@@ -205,6 +205,10 @@ func (cli *KafkaClient) isHeartbeat() bool {
 }
 
 func (cli *KafkaClient) processPayload(key, data []byte, action ProcessSinkMessage) {
+	if cli.IPC == "rpc" {
+		action(key, data)
+		return
+	}
 	// log.Printf("[debug] received %s", string(data))
 	if cli.isTelemetry() {
 		msgLog := &telemetry.TelemetryMessageLog{}
