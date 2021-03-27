@@ -5,5 +5,5 @@ type protoc >/dev/null 2>&1 || { echo >&2 "protoc required but it's not installe
 
 for module in rpc sink telemetry netflow; do
   mkdir -p $module
-  protoc -I . $module.proto --go_out=./$module
+  protoc --proto_path=./ --go_out=./ $module.proto
 done
