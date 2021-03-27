@@ -1,3 +1,5 @@
+// @author Alejandro Galue <agalue@opennms.org>
+
 package client
 
 import (
