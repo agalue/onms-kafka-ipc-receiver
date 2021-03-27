@@ -1,7 +1,7 @@
 OpenNMS Kafka IPC Receiver [![Go Report Card](https://goreportcard.com/badge/github.com/agalue/onms-kafka-ipc-receiver)](https://goreportcard.com/report/github.com/agalue/onms-kafka-ipc-receiver)
 ====
 
-A sample Kafka Consumer application to display IPC messages into the standard output for troubleshooting purposes. It supports reconstructing split messages when the payload exceeds the limit.
+A sample Kafka Consumer application based on [Watermil](https://watermill.io/), powered by [Sarama](https://github.com/Shopify/sarama), written in [Go](https://golang.org/) to display IPC messages into the standard output for troubleshooting purposes. It supports reconstructing split messages when the payload exceeds the limit.
 
 It exposes Prometheus compatible metrics through port 8181, using the `/metrics` endpoint.
 
@@ -20,9 +20,6 @@ When using Docker:
 * `TOPIC` environment variable with the source Sink API Kafka Topic with GPB Payload.
 * `PARSER` the parser to use when processing Sink Messages. Valid values are: `syslog`, `snmp`, `netflow`.
 * `GROUP_ID` environment variable with the Consumer Group ID (defaults to `opennms`)
-* To pass consumer settings, add an environment variable with the prefix `KAFKA_`, for example: `KAFKA_AUTO_OFFSET_RESET`.
-
-For consumer settings, the character underscore will be replaced with a dot and converted to lowercase. For example, `KAFKA_AUTO_OFFSET_RESET` will be configured as `auto.offset.reset`.
 
 When using CLI:
 
@@ -39,7 +36,7 @@ docker push agalue/onms-kafka-ipc-receiver:latest
 
 > *NOTE*: Please use your own Docker Hub account or use the image provided on my account.
 
-To build the applicatoin locally, make sure you have [Go](https://golang.org/) 1.16 and the latest [librdkafka](https://github.com/edenhill/librdkafka) installed on your machine, then:
+To build the applicatoin locally, make sure you have Go 1.16 installed on your machine, then:
 
 ```bash
 go build

@@ -3,6 +3,7 @@
 package client
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/xml"
 	"fmt"
@@ -11,95 +12,45 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill-kafka/v2/pkg/kafka"
+	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/ThreeDotsLabs/watermill/pubsub/gochannel"
 	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/netflow"
 	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/sink"
 	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/telemetry"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/prometheus/client_golang/prometheus"
-	"gopkg.in/confluentinc/confluent-kafka-go.v1/kafka"
 	"gotest.tools/assert"
 )
 
-type mockConsumer struct {
-	msgChannel chan *kafka.Message
-}
-
-func (mock *mockConsumer) Send(msg *kafka.Message) {
-	mock.msgChannel <- msg
-}
-
-func (mock *mockConsumer) Subscribe(topic string, rebalanceCb kafka.RebalanceCb) error {
-	return nil
-}
-
-func (mock *mockConsumer) Poll(timeoutMs int) (event kafka.Event) {
-	return <-mock.msgChannel
-}
-
-func (mock *mockConsumer) Close() (err error) {
-	return nil
-}
-
-func TestCreateConfig(t *testing.T) {
-	cli := &KafkaClient{
-		Bootstrap: "kafka1:9092",
-		GroupID:   "GoTest",
-		Parameters: Propertites{
-			"acks=1",
-			"fetch.min.bytes=2048",
-			"ssl.truststore.location",
-		},
-	}
-	config := cli.createConfig()
-
-	value, err := config.Get("bootstrap.servers", "unknown")
-	assert.NilError(t, err)
-	assert.Equal(t, cli.Bootstrap, value.(string))
-
-	value, err = config.Get("group.id", "unknown")
-	assert.NilError(t, err)
-	assert.Equal(t, cli.GroupID, value.(string))
-
-	value, err = config.Get("acks", "0")
-	assert.NilError(t, err)
-	assert.Equal(t, "1", value.(string))
-
-	value, err = config.Get("fetch.min.bytes", "0")
-	assert.NilError(t, err)
-	assert.Equal(t, "2048", value.(string))
-
-	value, err = config.Get("ssl.truststore.location", "unknown")
-	assert.NilError(t, err)
-	assert.Equal(t, "unknown", value.(string))
-}
-
 func TestProcessSingleMessage(t *testing.T) {
-	cli := createKafkaClient(nil)
+	cli, _, cancel := createKafkaClient()
 	data := cli.processMessage(buildMessage("0001", 0, 1, []byte("ABC")))
 	assert.Equal(t, "ABC", string(data))
+	cancel()
 }
 
 func TestProcessMultipleMessages(t *testing.T) {
-	cli := createKafkaClient(nil)
+	cli, _, cancel := createKafkaClient()
 	wg := &sync.WaitGroup{}
 	for i := 0; i < 5; i++ {
 		wg.Add(1)
 		go runProcessMessageTest(t, wg, cli, fmt.Sprintf("ID%d", i))
 	}
 	wg.Wait()
+	cancel()
 }
 
 func TestSyslogParser(t *testing.T) {
-	mock := &mockConsumer{
-		msgChannel: make(chan *kafka.Message, 1),
-	}
-	cli := createKafkaClient(mock)
+	cli, sub, cancel := createKafkaClient()
+
 	cli.Parser = "syslog"
 	var message string
 	go func() {
-		cli.Start(func(key, msg []byte) {
-			fmt.Printf("Key %s, Value: %s\n", string(key), string(msg))
+		cli.Start(func(key string, msg []byte) {
+			fmt.Printf("Key %s, Value: %s\n", key, string(msg))
 			message = string(msg)
 		})
 	}()
@@ -118,22 +69,19 @@ func TestSyslogParser(t *testing.T) {
 	data, err := xml.Marshal(dto)
 	assert.NilError(t, err)
 
-	mock.Send(buildMessage("001", 0, 1, data))
+	sub.Publish("Test", buildMessage("001", 0, 1, data))
 	time.Sleep(1 * time.Second)
 	assert.Assert(t, strings.Contains(message, "This is a test"))
-	cli.Stop()
+	cancel()
 }
 
 func TestSnmpParser(t *testing.T) {
-	mock := &mockConsumer{
-		msgChannel: make(chan *kafka.Message, 1),
-	}
-	cli := createKafkaClient(mock)
+	cli, sub, cancel := createKafkaClient()
 	cli.Parser = "snmp"
 	var message string
 	go func() {
-		cli.Start(func(key, msg []byte) {
-			fmt.Printf("Key %s, Value: %s\n", string(key), string(msg))
+		cli.Start(func(key string, msg []byte) {
+			fmt.Printf("Key %s, Value: %s\n", key, string(msg))
 			message = string(msg)
 		})
 	}()
@@ -172,22 +120,19 @@ func TestSnmpParser(t *testing.T) {
 	data, err := xml.Marshal(dto)
 	assert.NilError(t, err)
 
-	mock.Send(buildMessage("001", 0, 1, data))
+	sub.Publish("Test", buildMessage("001", 0, 1, data))
 	time.Sleep(1 * time.Second)
 	assert.Assert(t, strings.Contains(message, "This is a test"))
-	cli.Stop()
+	cancel()
 }
 
 func TestNetflowParser(t *testing.T) {
-	mock := &mockConsumer{
-		msgChannel: make(chan *kafka.Message, 1),
-	}
-	cli := createKafkaClient(mock)
+	cli, sub, cancel := createKafkaClient()
 	cli.Parser = "netflow"
 	var message string
 	go func() {
-		cli.Start(func(key, msg []byte) {
-			fmt.Printf("Key %s, Value: %s\n", string(key), string(msg))
+		cli.Start(func(key string, msg []byte) {
+			fmt.Printf("Key %s, Value: %s\n", key, string(msg))
 			message = string(msg)
 		})
 	}()
@@ -226,10 +171,10 @@ func TestNetflowParser(t *testing.T) {
 	data, err := proto.Marshal(telemetryMsg)
 	assert.NilError(t, err)
 
-	mock.Send(buildMessage("001", 0, 1, data))
+	sub.Publish("Test", buildMessage("001", 0, 1, data))
 	time.Sleep(1 * time.Second)
 	assert.Assert(t, strings.Contains(message, "12.0.0.2"))
-	cli.Stop()
+	cancel()
 }
 
 func runProcessMessageTest(t *testing.T, wg *sync.WaitGroup, cli *KafkaClient, id string) {
@@ -246,8 +191,7 @@ func runProcessMessageTest(t *testing.T, wg *sync.WaitGroup, cli *KafkaClient, i
 	wg.Done()
 }
 
-func buildMessage(id string, chunk, total int32, data []byte) *kafka.Message {
-	topic := "Test"
+func buildMessage(id string, chunk, total int32, data []byte) *message.Message {
 	sinkMsg := &sink.SinkMessage{
 		MessageId:          id,
 		CurrentChunkNumber: chunk,
@@ -255,21 +199,27 @@ func buildMessage(id string, chunk, total int32, data []byte) *kafka.Message {
 		Content:            data,
 	}
 	bytes, _ := proto.Marshal(sinkMsg)
-	kafkaMsg := &kafka.Message{
-		TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: 0},
-		Key:            []byte(id),
-		Value:          bytes,
+	return &message.Message{
+		UUID:    id,
+		Payload: bytes,
 	}
-	return kafkaMsg
 }
 
-func createKafkaClient(mock *mockConsumer) *KafkaClient {
+func createKafkaClient() (*KafkaClient, *gochannel.GoChannel, context.CancelFunc) {
+	pubSub := gochannel.NewGoChannel(
+		gochannel.Config{},
+		watermill.NewStdLogger(false, false),
+	)
+	ctx, cancel := context.WithCancel(context.Background())
+	msgChannel, _ := pubSub.Subscribe(ctx, "Test")
+
 	cli := &KafkaClient{
-		Bootstrap: "127.0.0.1:9092",
-		Topic:     "Test",
-		GroupID:   "Test",
-		IPC:       "sink",
-		consumer:  mock,
+		Bootstrap:  "127.0.0.1:9092",
+		Topic:      "Test",
+		GroupID:    "Test",
+		IPC:        "sink",
+		msgChannel: msgChannel,
+		subscriber: &kafka.Subscriber{},
 	}
 	cli.createVariables()
 	cli.chunkProcessed = prometheus.NewCounter(prometheus.CounterOpts{
@@ -278,5 +228,5 @@ func createKafkaClient(mock *mockConsumer) *KafkaClient {
 	cli.msgProcessed = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "mock_processed_messages_total",
 	})
-	return cli
+	return cli, pubSub, cancel
 }

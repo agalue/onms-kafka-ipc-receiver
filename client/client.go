@@ -4,13 +4,19 @@
 package client
 
 import (
+	"context"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"log"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/Shopify/sarama"
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill-kafka/v2/pkg/kafka"
+	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/netflow"
 	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/rpc"
 	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/sink"
@@ -18,7 +24,6 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"gopkg.in/confluentinc/confluent-kafka-go.v1/kafka"
 )
 
 // AvailableParsers list of available parsers
@@ -26,16 +31,9 @@ var AvailableParsers = &EnumValue{
 	Enum: []string{"heartbeat", "snmp", "syslog", "netflow", "sflow"},
 }
 
-// KafkaConsumer creates an generic interface with the relevant methods from kafka.Consumer
-type KafkaConsumer interface {
-	Subscribe(topic string, rebalanceCb kafka.RebalanceCb) error
-	Poll(timeoutMs int) (event kafka.Event)
-	Close() (err error)
-}
-
 // ProcessSinkMessage defines the action to execute after successfully received a Sink message.
 // It receives the payload as an array of bytes (usually in XML or JSON format)
-type ProcessSinkMessage func(key, msg []byte)
+type ProcessSinkMessage func(key string, msg []byte)
 
 // Propertites represents an array of string flags
 type Propertites []string
@@ -60,14 +58,14 @@ type ipcMessage struct {
 
 // KafkaClient defines a simple Kafka consumer client.
 type KafkaClient struct {
-	Bootstrap  string      // The Kafka Server Bootstrap string.
-	Topic      string      // The name of the Kafka Topic.
-	GroupID    string      // The name of the Consumer Group ID.
-	Parameters Propertites // List of Kafka Consumer Parameters.
-	IPC        string      // options: rpc, sink.
-	Parser     string      // options: syslog, snmp, netflow, sflow
+	Bootstrap string // The Kafka Server Bootstrap string.
+	Topic     string // The name of the Kafka Topic.
+	GroupID   string // The name of the Consumer Group ID.
+	IPC       string // options: rpc, sink.
+	Parser    string // options: syslog, snmp, netflow, sflow
 
-	consumer     KafkaConsumer
+	subscriber   *kafka.Subscriber
+	msgChannel   <-chan *message.Message
 	msgBuffer    map[string][]byte
 	chunkTracker map[string]int32
 	mutex        *sync.RWMutex
@@ -78,25 +76,11 @@ type KafkaClient struct {
 }
 
 // Creates the Kafka Configuration Map.
-func (cli *KafkaClient) createConfig() *kafka.ConfigMap {
-	config := &kafka.ConfigMap{
-		"bootstrap.servers":     cli.Bootstrap,
-		"group.id":              cli.GroupID,
-		"session.timeout.ms":    6000,
-		"broker.address.family": "v4",
-	}
-	if cli.Parameters != nil {
-		for _, kv := range cli.Parameters {
-			array := strings.Split(kv, "=")
-			if len(array) == 2 {
-				if err := config.SetKey(array[0], array[1]); err != nil {
-					log.Printf("[error] cannot add consumer config %s: %v", kv, err)
-				}
-			} else {
-				log.Printf("[error] invalid key-value pair %s", kv)
-			}
-		}
-	}
+func (cli *KafkaClient) createConfig() *sarama.Config {
+	config := sarama.NewConfig()
+	config.Version = sarama.V2_7_0_0
+	config.Consumer.Offsets.Initial = sarama.OffsetOldest
+	config.Consumer.Group.Session.Timeout = 6 * time.Second
 	return config
 }
 
@@ -118,10 +102,10 @@ func (cli *KafkaClient) registerCounters() {
 	})
 }
 
-func (cli *KafkaClient) getIpcMessage(msg *kafka.Message) (*ipcMessage, error) {
+func (cli *KafkaClient) getIpcMessage(msg *message.Message) (*ipcMessage, error) {
 	if cli.IPC == "rpc" {
 		rpcMsg := &rpc.RpcMessageProto{}
-		if err := proto.Unmarshal(msg.Value, rpcMsg); err != nil {
+		if err := proto.Unmarshal(msg.Payload, rpcMsg); err != nil {
 			return nil, fmt.Errorf("[warn] invalid rpc message received: %v", err)
 		}
 		cli.chunkProcessed.Inc()
@@ -133,7 +117,7 @@ func (cli *KafkaClient) getIpcMessage(msg *kafka.Message) (*ipcMessage, error) {
 		}, nil
 	}
 	sinkMsg := &sink.SinkMessage{}
-	if err := proto.Unmarshal(msg.Value, sinkMsg); err != nil {
+	if err := proto.Unmarshal(msg.Payload, sinkMsg); err != nil {
 		return nil, fmt.Errorf("[warn] invalid sink message received: %v", err)
 	}
 	return &ipcMessage{
@@ -146,7 +130,7 @@ func (cli *KafkaClient) getIpcMessage(msg *kafka.Message) (*ipcMessage, error) {
 
 // Processes a Kafka message. It return a non-empty slice when the message is complete, otherwise returns nil.
 // This is a concurrent safe method.
-func (cli *KafkaClient) processMessage(msg *kafka.Message) []byte {
+func (cli *KafkaClient) processMessage(msg *message.Message) []byte {
 	// Process IPC Messages
 	cli.chunkProcessed.Inc()
 	ipcmsg, err := cli.getIpcMessage(msg)
@@ -204,7 +188,7 @@ func (cli *KafkaClient) isHeartbeat() bool {
 	return strings.ToLower(cli.Parser) == "heartbeat"
 }
 
-func (cli *KafkaClient) processPayload(key, data []byte, action ProcessSinkMessage) {
+func (cli *KafkaClient) processPayload(key string, data []byte, action ProcessSinkMessage) {
 	if cli.IPC == "rpc" {
 		action(key, data)
 		return
@@ -262,8 +246,8 @@ func (cli *KafkaClient) bufferCleanup(id string) {
 }
 
 // Initialize builds the Kafka consumer object and the cache for chunk handling.
-func (cli *KafkaClient) Initialize() error {
-	if cli.consumer != nil {
+func (cli *KafkaClient) Initialize(ctx context.Context) error {
+	if cli.msgChannel != nil {
 		return fmt.Errorf("consumer already initialized")
 	}
 	if cli.IPC == "" {
@@ -280,14 +264,24 @@ func (cli *KafkaClient) Initialize() error {
 	}
 	var err error
 	log.Printf("[info] creating consumer for topic %s at %s", cli.Topic, cli.Bootstrap)
-	cli.consumer, err = kafka.NewConsumer(cli.createConfig())
+
+	cli.subscriber, err = kafka.NewSubscriber(
+		kafka.SubscriberConfig{
+			Brokers:               []string{cli.Bootstrap},
+			Unmarshaler:           kafka.DefaultMarshaler{},
+			OverwriteSaramaConfig: cli.createConfig(),
+			ConsumerGroup:         cli.GroupID,
+		},
+		watermill.NewStdLogger(false, false),
+	)
 	if err != nil {
 		return fmt.Errorf("cannot create consumer: %v", err)
 	}
-	err = cli.consumer.Subscribe(cli.Topic, nil)
+	cli.msgChannel, err = cli.subscriber.Subscribe(ctx, cli.Topic)
 	if err != nil {
 		return fmt.Errorf("cannot subscribe to topic %s: %v", cli.Topic, err)
 	}
+
 	cli.createVariables()
 	cli.registerCounters()
 	return nil
@@ -306,17 +300,10 @@ func (cli *KafkaClient) byteCount(b float64) string {
 	return fmt.Sprintf("%.1f %ciB", b/float64(div), "KMGTPE"[exp])
 }
 
-func (cli *KafkaClient) showStats(sts *kafka.Stats) {
-	// https://github.com/edenhill/librdkafka/blob/master/STATISTICS.md
-	var stats map[string]interface{}
-	json.Unmarshal([]byte(sts.String()), &stats)
-	log.Printf("[stats] %v messages (%v) consumed", stats["rxmsgs"], cli.byteCount(stats["rxmsg_bytes"].(float64)))
-}
-
 // Start registers the consumer for the chosen topic, and reads messages from it on an infinite loop.
 // It is recommended to use it within a Go Routine as it is a blocking operation.
 func (cli *KafkaClient) Start(action ProcessSinkMessage) {
-	if cli.consumer == nil {
+	if cli.msgChannel == nil {
 		log.Fatal("Consumer not initialized")
 	}
 
@@ -324,29 +311,9 @@ func (cli *KafkaClient) Start(action ProcessSinkMessage) {
 	log.Printf("[info] starting kafka consumer: %s", string(jsonBytes))
 
 	cli.stopping = false
-	for {
-		if cli.stopping {
-			return
-		}
-		event := cli.consumer.Poll(500)
-		switch e := event.(type) {
-		case *kafka.Message:
-			log.Printf("[info] received message of %d bytes at %v", len(e.Value), e.TopicPartition)
-			if data := cli.processMessage(e); data != nil {
-				cli.processPayload(e.Key, data, action)
-			}
-		case kafka.Error:
-			log.Printf("[warn] consumer error %v", e)
-		case *kafka.Stats:
-			cli.showStats(e)
+	for msg := range cli.msgChannel {
+		if data := cli.processMessage(msg); data != nil {
+			cli.processPayload(msg.UUID, data, action)
 		}
 	}
-}
-
-// Stop terminates the Kafka consumer and waits for the execution of all pending action handlers.
-func (cli *KafkaClient) Stop() {
-	log.Println("stopping consumer")
-	cli.stopping = true
-	cli.consumer.Close()
-	log.Println("good bye!")
 }
