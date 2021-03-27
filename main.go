@@ -46,17 +46,17 @@ func main() {
 	}()
 
 	if err := cli.Initialize(ctx); err != nil {
-		log.Fatalf("Cannot initialize consumer: %v", err)
+		log.Fatalf("cannot initialize consumer: %v", err)
 	}
 
 	go func() {
-		log.Printf("Starting Prometheus Metrics Server on port %d", promPort)
+		log.Printf("starting Prometheus Metrics Server on port %d", promPort)
 		http.Handle("/metrics", promhttp.Handler())
 		http.ListenAndServe(fmt.Sprintf(":%d", promPort), nil)
 	}()
 
 	log.Println("starting consumer")
-	cli.Start(func(key string, msg []byte) {
-		log.Printf("Key: %s, Value:\n%s", key, string(msg))
+	cli.Start(func(msg []byte) {
+		log.Printf("received %s:%s message: %s", cli.IPC, cli.Parser, string(msg))
 	})
 }

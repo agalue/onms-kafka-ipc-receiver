@@ -49,8 +49,8 @@ func TestSyslogParser(t *testing.T) {
 	cli.Parser = "syslog"
 	var message string
 	go func() {
-		cli.Start(func(key string, msg []byte) {
-			fmt.Printf("Key %s, Value: %s\n", key, string(msg))
+		cli.Start(func(msg []byte) {
+			fmt.Printf("Value: %s", string(msg))
 			message = string(msg)
 		})
 	}()
@@ -80,8 +80,8 @@ func TestSnmpParser(t *testing.T) {
 	cli.Parser = "snmp"
 	var message string
 	go func() {
-		cli.Start(func(key string, msg []byte) {
-			fmt.Printf("Key %s, Value: %s\n", key, string(msg))
+		cli.Start(func(msg []byte) {
+			fmt.Printf("Value: %s", string(msg))
 			message = string(msg)
 		})
 	}()
@@ -131,8 +131,8 @@ func TestNetflowParser(t *testing.T) {
 	cli.Parser = "netflow"
 	var message string
 	go func() {
-		cli.Start(func(key string, msg []byte) {
-			fmt.Printf("Key %s, Value: %s\n", key, string(msg))
+		cli.Start(func(msg []byte) {
+			fmt.Printf("Value: %s", string(msg))
 			message = string(msg)
 		})
 	}()

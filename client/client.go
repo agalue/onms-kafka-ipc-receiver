@@ -31,9 +31,9 @@ var AvailableParsers = &EnumValue{
 	Enum: []string{"heartbeat", "snmp", "syslog", "netflow", "sflow"},
 }
 
-// ProcessSinkMessage defines the action to execute after successfully received a Sink message.
+// ProcessMessage defines the action to execute after successfully received a Sink message.
 // It receives the payload as an array of bytes (usually in XML or JSON format)
-type ProcessSinkMessage func(key string, msg []byte)
+type ProcessMessage func(msg []byte)
 
 // Propertites represents an array of string flags
 type Propertites []string
@@ -79,7 +79,7 @@ type KafkaClient struct {
 func (cli *KafkaClient) createConfig() *sarama.Config {
 	config := sarama.NewConfig()
 	config.Version = sarama.V2_7_0_0
-	config.Consumer.Offsets.Initial = sarama.OffsetOldest
+	config.Consumer.Offsets.Initial = sarama.OffsetNewest
 	config.Consumer.Group.Session.Timeout = 6 * time.Second
 	return config
 }
@@ -188,12 +188,11 @@ func (cli *KafkaClient) isHeartbeat() bool {
 	return strings.ToLower(cli.Parser) == "heartbeat"
 }
 
-func (cli *KafkaClient) processPayload(key string, data []byte, action ProcessSinkMessage) {
+func (cli *KafkaClient) processPayload(data []byte, action ProcessMessage) {
 	if cli.IPC == "rpc" {
-		action(key, data)
+		action(data)
 		return
 	}
-	// log.Printf("[debug] received %s", string(data))
 	if cli.isTelemetry() {
 		msgLog := &telemetry.TelemetryMessageLog{}
 		if err := proto.Unmarshal(data, msgLog); err != nil {
@@ -208,7 +207,7 @@ func (cli *KafkaClient) processPayload(key string, data []byte, action ProcessSi
 					return
 				}
 				bytes, _ := json.MarshalIndent(flow, "", "  ")
-				action(key, bytes)
+				action(bytes)
 			} else if cli.isSflow() {
 				log.Println("[warn] sflow has not been implemented")
 			} else {
@@ -221,16 +220,16 @@ func (cli *KafkaClient) processPayload(key string, data []byte, action ProcessSi
 			log.Printf("[warn] invalid syslog message received: %v", err)
 			return
 		}
-		action(key, []byte(syslog.String()))
+		action([]byte(syslog.String()))
 	} else if cli.isSnmp() {
 		trap := &TrapLogDTO{}
 		if err := xml.Unmarshal(data, trap); err != nil {
 			log.Printf("[warn] invalid snmp trap message received: %v", err)
 			return
 		}
-		action(key, []byte(trap.String()))
+		action([]byte(trap.String()))
 	} else if cli.isHeartbeat() {
-		action(key, data)
+		action(data)
 	} else {
 		log.Printf("[error] invalid parser %s, ignoring payload", cli.Parser)
 	}
@@ -302,18 +301,19 @@ func (cli *KafkaClient) byteCount(b float64) string {
 
 // Start registers the consumer for the chosen topic, and reads messages from it on an infinite loop.
 // It is recommended to use it within a Go Routine as it is a blocking operation.
-func (cli *KafkaClient) Start(action ProcessSinkMessage) {
+func (cli *KafkaClient) Start(action ProcessMessage) {
 	if cli.msgChannel == nil {
 		log.Fatal("Consumer not initialized")
 	}
 
-	jsonBytes, _ := json.MarshalIndent(cli, "", "  ")
+	jsonBytes, _ := json.Marshal(cli)
 	log.Printf("[info] starting kafka consumer: %s", string(jsonBytes))
 
 	cli.stopping = false
 	for msg := range cli.msgChannel {
 		if data := cli.processMessage(msg); data != nil {
-			cli.processPayload(msg.UUID, data, action)
+			cli.processPayload(data, action)
 		}
+		msg.Ack()
 	}
 }
