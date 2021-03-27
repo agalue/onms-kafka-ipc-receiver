@@ -26,29 +26,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-// AvailableParsers list of available parsers
+// AvailableParsers list of available parsers.
 var AvailableParsers = &EnumValue{
 	Enum: []string{"heartbeat", "snmp", "syslog", "netflow", "sflow"},
 }
 
-// ProcessMessage defines the action to execute after successfully received a Sink message.
-// It receives the payload as an array of bytes (usually in XML or JSON format)
+// ProcessMessage defines the action to execute after successfully received an IPC message.
+// It receives the payload as an array of bytes (usually in XML or JSON format).
 type ProcessMessage func(msg []byte)
 
-// Propertites represents an array of string flags
-type Propertites []string
-
-func (p *Propertites) String() string {
-	return strings.Join(*p, ", ")
-}
-
-// Set stores a string flag in the array
-func (p *Propertites) Set(value string) error {
-	*p = append(*p, value)
-	return nil
-}
-
-// ipcMessage internal structure that represents an IPC message
+// ipcMessage internal structure that represents an IPC message.
 type ipcMessage struct {
 	chunk   int32
 	total   int32
@@ -75,7 +62,7 @@ type KafkaClient struct {
 	chunkProcessed prometheus.Counter
 }
 
-// Creates the Kafka Configuration Map.
+// createConfig Creates the Kafka Configuration object.
 func (cli *KafkaClient) createConfig() *sarama.Config {
 	config := sarama.NewConfig()
 	config.Version = sarama.V2_7_0_0
@@ -84,14 +71,15 @@ func (cli *KafkaClient) createConfig() *sarama.Config {
 	return config
 }
 
-// Initializes all internal variables.
+// createVariables Initializes all internal variables.
 func (cli *KafkaClient) createVariables() {
 	cli.msgBuffer = make(map[string][]byte)
 	cli.chunkTracker = make(map[string]int32)
 	cli.mutex = &sync.RWMutex{}
 }
 
-func (cli *KafkaClient) registerCounters() {
+// createCounters Creates the prometheus counters.
+func (cli *KafkaClient) createCounters() {
 	cli.msgProcessed = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "onms_ipc_processed_messages_total",
 		Help: "The total number of processed messages",
@@ -102,6 +90,8 @@ func (cli *KafkaClient) registerCounters() {
 	})
 }
 
+// getIpcMessage Processes a watermill message and returns an IPC message.
+// The returning message depends on whether or not a message comes from the RPC or Sink API.
 func (cli *KafkaClient) getIpcMessage(msg *message.Message) (*ipcMessage, error) {
 	if cli.IPC == "rpc" {
 		rpcMsg := &rpc.RpcMessageProto{}
@@ -128,7 +118,8 @@ func (cli *KafkaClient) getIpcMessage(msg *message.Message) (*ipcMessage, error)
 	}, nil
 }
 
-// Processes a Kafka message. It return a non-empty slice when the message is complete, otherwise returns nil.
+// processMessage Processes a watermill message.
+// It return a non-empty slice when the message is complete, otherwise returns nil.
 // This is a concurrent safe method.
 func (cli *KafkaClient) processMessage(msg *message.Message) []byte {
 	// Process IPC Messages
@@ -164,30 +155,37 @@ func (cli *KafkaClient) processMessage(msg *message.Message) []byte {
 	return data
 }
 
+// isTelemetry Returns true if the client is expecting a Telemetry message.
 func (cli *KafkaClient) isTelemetry() bool {
 	return cli.isNetflow() || cli.isSflow()
 }
 
+// isSflow Returns true if the client is expecting an Sflow message.
 func (cli *KafkaClient) isSflow() bool {
 	return strings.ToLower(cli.Parser) == "sflow"
 }
 
+// isNetflow Returns true if the client is expecting a Netflow message.
 func (cli *KafkaClient) isNetflow() bool {
 	return strings.ToLower(cli.Parser) == "netflow"
 }
 
+// isSyslog Returns true if the client is expecting a Syslog message.
 func (cli *KafkaClient) isSyslog() bool {
 	return strings.ToLower(cli.Parser) == "syslog"
 }
 
+// isSnmp Returns true if the client is expecting an SNMP Trap message.
 func (cli *KafkaClient) isSnmp() bool {
 	return strings.ToLower(cli.Parser) == "snmp"
 }
 
+// isHeartbeat Returns true if the client is expecting a Heartbeat message.
 func (cli *KafkaClient) isHeartbeat() bool {
 	return strings.ToLower(cli.Parser) == "heartbeat"
 }
 
+// processPayload Processes the byte array payload and executed the action on success.
 func (cli *KafkaClient) processPayload(data []byte, action ProcessMessage) {
 	if cli.IPC == "rpc" {
 		action(data)
@@ -235,7 +233,8 @@ func (cli *KafkaClient) processPayload(data []byte, action ProcessMessage) {
 	}
 }
 
-// Cleans up the chunk buffer. Should be called after successfully processed all chunks.
+// bufferCleanup Cleans up the chunk buffer.
+// Should be called after successfully processed all chunks.
 // This is a concurrent safe method.
 func (cli *KafkaClient) bufferCleanup(id string) {
 	cli.mutex.Lock()
@@ -244,7 +243,7 @@ func (cli *KafkaClient) bufferCleanup(id string) {
 	cli.mutex.Unlock()
 }
 
-// Initialize builds the Kafka consumer object and the cache for chunk handling.
+// Initialize Builds the Kafka consumer object and the cache for chunk handling.
 func (cli *KafkaClient) Initialize(ctx context.Context) error {
 	if cli.msgChannel != nil {
 		return fmt.Errorf("consumer already initialized")
@@ -282,28 +281,15 @@ func (cli *KafkaClient) Initialize(ctx context.Context) error {
 	}
 
 	cli.createVariables()
-	cli.registerCounters()
+	cli.createCounters()
 	return nil
 }
 
-func (cli *KafkaClient) byteCount(b float64) string {
-	const unit = 1024
-	if b < unit {
-		return fmt.Sprintf("%f B", b)
-	}
-	div, exp := int64(unit), 0
-	for n := b / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %ciB", b/float64(div), "KMGTPE"[exp])
-}
-
-// Start registers the consumer for the chosen topic, and reads messages from it on an infinite loop.
+// Start Registers the consumer for the chosen topic, and reads messages from it on an infinite loop.
 // It is recommended to use it within a Go Routine as it is a blocking operation.
 func (cli *KafkaClient) Start(action ProcessMessage) {
 	if cli.msgChannel == nil {
-		log.Fatal("Consumer not initialized")
+		log.Fatal("consumer not initialized")
 	}
 
 	jsonBytes, _ := json.Marshal(cli)
