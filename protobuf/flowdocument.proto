@@ -1,10 +1,10 @@
-// Source: https://github.com/OpenNMS/opennms/blob/develop/features/flows/kafka-persistence/src/main/proto/flowdocument.proto
+// Source: https://github.com/OpenNMS/opennms/blob/master/features/flows/kafka-persistence/src/main/proto/flowdocument.proto
 
 syntax = "proto3";
 
 package flowdocument;
 
-option go_package = ".;flowdocument";
+option go_package = "./flowdocument";
 
 import "google/protobuf/wrappers.proto";
 

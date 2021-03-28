@@ -1,16 +1,14 @@
 FROM golang:alpine AS builder
 RUN mkdir /app && \
-    echo "@edgecommunity http://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories && \
     apk update && \
-    apk add --no-cache alpine-sdk git librdkafka-dev@edgecommunity
+    apk add --no-cache alpine-sdk git
 ADD ./ /app/
 WORKDIR /app
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -tags musl -a -o onms-kafka-ipc-receiver
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags musl -a -o onms-kafka-ipc-receiver
 
 FROM alpine
-RUN echo "@edgecommunity http://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories && \
-    apk update && \
-    apk add --no-cache bash librdkafka@edgecommunity && \
+RUN apk update && \
+    apk add --no-cache bash && \
     rm -rf /var/cache/apk/* && \
     addgroup -S onms && adduser -S -G onms onms
 COPY --from=builder /app/onms-kafka-ipc-receiver /onms-kafka-ipc-receiver
