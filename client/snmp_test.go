@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 )
 
 func TestSnmpV1(t *testing.T) {

@@ -18,5 +18,5 @@ require (
 	golang.org/x/net v0.0.0-20210326220855-61e056675ecf // indirect
 	golang.org/x/sys v0.0.0-20210326220804-49726bf1d181 // indirect
 	google.golang.org/protobuf v1.26.0
-	gotest.tools v2.2.0+incompatible
+	gotest.tools/v3 v3.0.3
 )

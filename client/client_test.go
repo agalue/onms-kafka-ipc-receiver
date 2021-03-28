@@ -22,7 +22,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/prometheus/client_golang/prometheus"
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 )
 
 func TestProcessSingleMessage(t *testing.T) {
