@@ -64,7 +64,7 @@ type KafkaClient struct {
 
 // createConfig Creates the Kafka Configuration object.
 func (cli *KafkaClient) createConfig() *sarama.Config {
-	config := sarama.NewConfig()
+	config := kafka.DefaultSaramaSubscriberConfig()
 	config.Version = sarama.V2_7_0_0
 	config.Consumer.Offsets.Initial = sarama.OffsetNewest
 	config.Consumer.Group.Session.Timeout = 6 * time.Second
