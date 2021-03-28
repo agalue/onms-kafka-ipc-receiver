@@ -1,6 +1,6 @@
 // @author Alejandro Galue <agalue@opennms.org>
 
-// Package client implements a kafka consumer that works with single or multi-part messages for OpenNMS Sink API messages.
+// Package client implements a kafka consumer that works with single or multi-part messages for OpenNMS Sink and RPC API messages.
 package client
 
 import (
@@ -26,7 +26,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-// AvailableParsers list of available parsers.
+// AvailableParsers list of available parsers for the Sink API.
 var AvailableParsers = &EnumValue{
 	Enum: []string{"heartbeat", "snmp", "syslog", "netflow", "sflow"},
 }
@@ -48,8 +48,8 @@ type KafkaClient struct {
 	Bootstrap string // The Kafka Server Bootstrap string.
 	Topic     string // The name of the Kafka Topic.
 	GroupID   string // The name of the Consumer Group ID.
-	IPC       string // options: rpc, sink.
-	Parser    string // options: syslog, snmp, netflow, sflow
+	IPC       string // Either rpc or sink.
+	Parser    string // See AvailableParsers.
 
 	subscriber   *kafka.Subscriber
 	msgChannel   <-chan *message.Message
@@ -111,10 +111,10 @@ func (cli *KafkaClient) getIpcMessage(msg *message.Message) (*ipcMessage, error)
 		return nil, fmt.Errorf("[warn] invalid sink message received: %v", err)
 	}
 	return &ipcMessage{
-		chunk:   sinkMsg.GetCurrentChunkNumber() + 1, // Chunks starts at 0
-		total:   sinkMsg.GetTotalChunks(),
-		id:      sinkMsg.GetMessageId(),
-		content: sinkMsg.GetContent(),
+		chunk:   sinkMsg.CurrentChunkNumber + 1, // Chunks starts at 0
+		total:   sinkMsg.TotalChunks,
+		id:      sinkMsg.MessageId,
+		content: sinkMsg.Content,
 	}, nil
 }
 
@@ -252,17 +252,17 @@ func (cli *KafkaClient) Initialize(ctx context.Context) error {
 		cli.IPC = "sink"
 	} else {
 		if cli.IPC != "sink" && cli.IPC != "rpc" {
-			return fmt.Errorf("invalid IPC %s. Expected sink, rpc", cli.IPC)
+			return fmt.Errorf("invalid IPC %s; expecting sink, rpc", cli.IPC)
 		}
 	}
 	if cli.Parser != "" {
 		if err := AvailableParsers.Set(cli.Parser); err != nil {
-			return fmt.Errorf("invalid Sink parser %s. Expected %s", cli.Parser, AvailableParsers.EnumAsString())
+			return fmt.Errorf("invalid Sink parser %s; expecting %s", cli.Parser, AvailableParsers.EnumAsString())
 		}
 	}
+
 	var err error
 	log.Printf("[info] creating consumer for topic %s at %s", cli.Topic, cli.Bootstrap)
-
 	cli.subscriber, err = kafka.NewSubscriber(
 		kafka.SubscriberConfig{
 			Brokers:               []string{cli.Bootstrap},
