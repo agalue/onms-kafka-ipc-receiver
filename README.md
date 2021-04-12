@@ -18,7 +18,7 @@ When using Docker:
 * `BOOTSTRAP_SERVER` environment variable with Kafka Bootstrap Server (i.e. `kafka01:9092`)
 * `IPC` the IPC message kind to process. Either `rpc` or `sink` is allowed (defaults to `sink`).
 * `TOPIC` environment variable with the source Sink API Kafka Topic with GPB Payload.
-* `PARSER` the parser to use when processing Sink Messages. Valid values are: `syslog`, `snmp`, `netflow`.
+* `PARSER` the parser to use when processing Sink Messages. Valid values are: `heartbeat`, `snmp`, `syslog`,  `netflow`, `sflow`.
 * `GROUP_ID` environment variable with the Consumer Group ID (defaults to `opennms`)
 
 When using CLI:

@@ -199,6 +199,7 @@ func (cli *KafkaClient) processPayload(data []byte, action ProcessMessage) {
 			log.Printf("[warn] error processing telemetry message: %v", err)
 			return
 		}
+		log.Printf("telemetry message from %s:%d at location %s (minion ID: %s)", msgLog.GetSourceAddress(), msgLog.GetSourcePort(), msgLog.GetLocation(), msgLog.GetSystemId())
 		for _, msg := range msgLog.Message {
 			if cli.isNetflow() {
 				flow := &netflow.FlowMessage{}
