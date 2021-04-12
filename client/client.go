@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"gopkg.in/mgo.v2/bson"
+
 	"github.com/Shopify/sarama"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-kafka/v2/pkg/kafka"
@@ -207,7 +209,13 @@ func (cli *KafkaClient) processPayload(data []byte, action ProcessMessage) {
 				bytes, _ := json.MarshalIndent(flow, "", "  ")
 				action(bytes)
 			} else if cli.isSflow() {
-				log.Println("[warn] sflow has not been implemented")
+				doc := &bson.D{} // Assuming BSON Document
+				if err := bson.Unmarshal(msg.Bytes, doc); err != nil {
+					log.Printf("[warn] invalid sflow message received: %v", err)
+					return
+				}
+				bytes, _ := json.MarshalIndent(doc, "", "  ")
+				action(bytes)
 			} else {
 				log.Println("[warn] cannot parse telemetry message due to invalid parser")
 			}

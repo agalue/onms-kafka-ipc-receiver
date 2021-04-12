@@ -4,6 +4,7 @@
 *.dll
 *.so
 *.dylib
+dist
 onms-kafka-ipc-receiver
 
 # Test binary, built with `go test -c`
