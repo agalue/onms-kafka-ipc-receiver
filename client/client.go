@@ -41,6 +41,8 @@ type ProcessMessage func(msg []byte)
 type ipcMessage struct {
 	chunk   int32
 	total   int32
+	system  string
+	module  string
 	id      string
 	content []byte
 }
@@ -67,7 +69,7 @@ type KafkaClient struct {
 // createConfig Creates the Kafka Configuration object.
 func (cli *KafkaClient) createConfig() *sarama.Config {
 	config := kafka.DefaultSaramaSubscriberConfig()
-	config.Version = sarama.V2_7_0_0
+//	config.Version = sarama.V2_7_0_0
 	config.Consumer.Offsets.Initial = sarama.OffsetNewest
 	config.Consumer.Group.Session.Timeout = 6 * time.Second
 	return config
@@ -106,6 +108,8 @@ func (cli *KafkaClient) getIpcMessage(msg *message.Message) (*ipcMessage, error)
 			total:   rpcMsg.TotalChunks,
 			id:      rpcMsg.RpcId,
 			content: rpcMsg.RpcContent,
+			system:  rpcMsg.SystemId,
+			module:  rpcMsg.ModuleId,
 		}, nil
 	}
 	sinkMsg := &sink.SinkMessage{}
@@ -127,6 +131,9 @@ func (cli *KafkaClient) processMessage(msg *message.Message) []byte {
 	// Process IPC Messages
 	cli.chunkProcessed.Inc()
 	ipcmsg, err := cli.getIpcMessage(msg)
+	if ipcmsg.system != "" {
+		log.Printf("%s rpc message %s received from minion %s", ipcmsg.module, ipcmsg.id, ipcmsg.system)
+	}
 	if err != nil {
 		log.Printf("[error] invalid IPC message: %v", err)
 		return nil

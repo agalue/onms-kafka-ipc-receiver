@@ -57,6 +57,6 @@ func main() {
 
 	log.Println("starting consumer")
 	cli.Start(func(msg []byte) {
-		log.Printf("received %s:%s message: %s", cli.IPC, cli.Parser, string(msg))
+		log.Printf("received %s:%s message:\n%s", cli.IPC, cli.Parser, string(msg))
 	})
 }
