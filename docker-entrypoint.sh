@@ -1,7 +1,7 @@
 #!/bin/bash -e
 # @author Alejandro Galue <agalue@opennms.org>
 
-GROUP_ID=${GROUP_ID-sink-go-client}
+GROUP_ID=${GROUP_ID-onms-kafka-ipc-receiver}
 
 OPTIONS=()
 if [ ! -z "${BOOTSTRAP_SERVER}" ]; then

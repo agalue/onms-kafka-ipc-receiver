@@ -23,9 +23,11 @@ import (
 	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/rpc"
 	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/sink"
 	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/telemetry"
-	"github.com/golang/protobuf/proto"
+	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/twin"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	"google.golang.org/protobuf/proto"
 )
 
 // AvailableParsers list of available parsers for the Sink API.
@@ -39,12 +41,14 @@ type ProcessMessage func(msg []byte)
 
 // ipcMessage internal structure that represents an IPC message.
 type ipcMessage struct {
-	chunk   int32
-	total   int32
-	system  string
-	module  string
-	id      string
-	content []byte
+	chunk       int32
+	total       int32
+	system      string
+	module      string
+	location    string
+	id          string
+	consumerKey string
+	content     []byte
 }
 
 // KafkaClient defines a simple Kafka consumer client.
@@ -69,7 +73,6 @@ type KafkaClient struct {
 // createConfig Creates the Kafka Configuration object.
 func (cli *KafkaClient) createConfig() *sarama.Config {
 	config := kafka.DefaultSaramaSubscriberConfig()
-//	config.Version = sarama.V2_7_0_0
 	config.Consumer.Offsets.Initial = sarama.OffsetNewest
 	config.Consumer.Group.Session.Timeout = 6 * time.Second
 	return config
@@ -102,7 +105,8 @@ func (cli *KafkaClient) getIpcMessage(msg *message.Message) (*ipcMessage, error)
 		if err := proto.Unmarshal(msg.Payload, rpcMsg); err != nil {
 			return nil, fmt.Errorf("[warn] invalid rpc message received: %v", err)
 		}
-		cli.chunkProcessed.Inc()
+		raw, _ := json.MarshalIndent(rpcMsg, "", "  ")
+		log.Printf("raw message: %s", raw)
 		return &ipcMessage{
 			chunk:   rpcMsg.CurrentChunkNumber + 1, // Chunks starts at 0
 			total:   rpcMsg.TotalChunks,
@@ -112,16 +116,62 @@ func (cli *KafkaClient) getIpcMessage(msg *message.Message) (*ipcMessage, error)
 			module:  rpcMsg.ModuleId,
 		}, nil
 	}
-	sinkMsg := &sink.SinkMessage{}
-	if err := proto.Unmarshal(msg.Payload, sinkMsg); err != nil {
-		return nil, fmt.Errorf("[warn] invalid sink message received: %v", err)
+	if cli.IPC == "sink" {
+		sinkMsg := &sink.SinkMessage{}
+		if err := proto.Unmarshal(msg.Payload, sinkMsg); err != nil {
+			return nil, fmt.Errorf("[warn] invalid sink message received: %v", err)
+		}
+		raw, _ := json.MarshalIndent(sinkMsg, "", "  ")
+		log.Printf("raw message: %s", raw)
+		return &ipcMessage{
+			chunk:   sinkMsg.CurrentChunkNumber + 1, // Chunks starts at 0
+			total:   sinkMsg.TotalChunks,
+			id:      sinkMsg.MessageId,
+			content: sinkMsg.Content,
+		}, nil
 	}
-	return &ipcMessage{
-		chunk:   sinkMsg.CurrentChunkNumber + 1, // Chunks starts at 0
-		total:   sinkMsg.TotalChunks,
-		id:      sinkMsg.MessageId,
-		content: sinkMsg.Content,
-	}, nil
+	if cli.IPC == "twin-request" {
+		rpcMsg := &twin.TwinRequestProto{}
+		if err := proto.Unmarshal(msg.Payload, rpcMsg); err != nil {
+			return nil, fmt.Errorf("[warn] invalid twin request message received: %v", err)
+		}
+		raw, _ := json.MarshalIndent(rpcMsg, "", "  ")
+		log.Printf("raw message: %s", raw)
+		return &ipcMessage{
+			consumerKey: rpcMsg.ConsumerKey,
+			system:      rpcMsg.SystemId,
+			location:    rpcMsg.Location,
+		}, nil
+	}
+	if cli.IPC == "twin-response" {
+		rpcMsg := &twin.TwinResponseProto{}
+		if err := proto.Unmarshal(msg.Payload, rpcMsg); err != nil {
+			return nil, fmt.Errorf("[warn] invalid twin response message received: %v", err)
+		}
+		raw, _ := json.MarshalIndent(rpcMsg, "", "  ")
+		log.Printf("raw message: %s", raw)
+		return &ipcMessage{
+			id:          rpcMsg.SessionId,
+			consumerKey: rpcMsg.ConsumerKey,
+			system:      rpcMsg.SystemId,
+			location:    rpcMsg.Location,
+			content:     []byte(rpcMsg.TwinObject),
+		}, nil
+	}
+	if cli.IPC == "twin-header" {
+		headerMsg := &twin.MinionHeader{}
+		if err := proto.Unmarshal(msg.Payload, headerMsg); err != nil {
+			return nil, fmt.Errorf("[warn] invalid twin header message received: %v", err)
+		}
+		raw, _ := json.MarshalIndent(headerMsg, "", "  ")
+		log.Printf("raw message: %s", raw)
+		return &ipcMessage{
+			system:   headerMsg.SystemId,
+			location: headerMsg.Location,
+		}, nil
+	}
+
+	return nil, fmt.Errorf("invalid IPC kind %s; valid are: sink, rpc, twin-header, twin-request, twin-response", cli.IPC)
 }
 
 // processMessage Processes a watermill message.
@@ -131,9 +181,6 @@ func (cli *KafkaClient) processMessage(msg *message.Message) []byte {
 	// Process IPC Messages
 	cli.chunkProcessed.Inc()
 	ipcmsg, err := cli.getIpcMessage(msg)
-	if ipcmsg.system != "" {
-		log.Printf("%s rpc message %s received from minion %s", ipcmsg.module, ipcmsg.id, ipcmsg.system)
-	}
 	if err != nil {
 		log.Printf("[error] invalid IPC message: %v", err)
 		return nil
@@ -149,6 +196,9 @@ func (cli *KafkaClient) processMessage(msg *message.Message) []byte {
 		}
 		cli.mutex.Unlock()
 		return nil
+	}
+	if ipcmsg.module != "" && ipcmsg.system != "" {
+		log.Printf("%s rpc message %s associated with minion %s", ipcmsg.module, ipcmsg.id, ipcmsg.system)
 	}
 	// Retrieve the complete message from the buffer
 	var data []byte
@@ -196,7 +246,7 @@ func (cli *KafkaClient) isHeartbeat() bool {
 
 // processPayload Processes the byte array payload and executed the action on success.
 func (cli *KafkaClient) processPayload(data []byte, action ProcessMessage) {
-	if cli.IPC == "rpc" {
+	if cli.IPC == "rpc" || cli.IPC == "twin-response" {
 		action(data)
 		return
 	}
@@ -267,8 +317,8 @@ func (cli *KafkaClient) Initialize(ctx context.Context) error {
 	if cli.IPC == "" {
 		cli.IPC = "sink"
 	} else {
-		if cli.IPC != "sink" && cli.IPC != "rpc" {
-			return fmt.Errorf("invalid IPC %s; expecting sink, rpc", cli.IPC)
+		if cli.IPC != "sink" && cli.IPC != "rpc" && cli.IPC != "twin-header" && cli.IPC != "twin-request" && cli.IPC != "twin-response" {
+			return fmt.Errorf("invalid IPC %s; expecting sink, rpc, twin-header, twin-request, twin-response", cli.IPC)
 		}
 	}
 	if cli.Parser != "" {
@@ -306,6 +356,13 @@ func (cli *KafkaClient) Initialize(ctx context.Context) error {
 func (cli *KafkaClient) Start(action ProcessMessage) {
 	if cli.msgChannel == nil {
 		log.Fatal("consumer not initialized")
+	}
+
+	if cli.IPC == "rpc" {
+		cli.Parser = "rpc"
+	}
+	if strings.Contains(cli.IPC, "twin") {
+		cli.Parser = "twin"
 	}
 
 	jsonBytes, _ := json.Marshal(cli)

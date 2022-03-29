@@ -19,10 +19,11 @@ import (
 	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/netflow"
 	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/sink"
 	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/telemetry"
-	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/prometheus/client_golang/prometheus"
 	"gotest.tools/v3/assert"
+
+	"google.golang.org/protobuf/proto"
 )
 
 func TestProcessSingleMessage(t *testing.T) {

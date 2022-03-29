@@ -25,8 +25,8 @@ func main() {
 	cli := client.KafkaClient{}
 	flag.StringVar(&cli.Bootstrap, "bootstrap", "localhost:9092", "kafka bootstrap server")
 	flag.StringVar(&cli.Topic, "topic", "OpenNMS.Sink.Trap", "kafka topic that will receive the messages")
-	flag.StringVar(&cli.GroupID, "group-id", "sink-go-client", "the consumer group ID")
-	flag.StringVar(&cli.IPC, "ipc", "sink", "IPC API: sink, rpc")
+	flag.StringVar(&cli.GroupID, "group-id", "onms-kafka-ipc-receiver", "the consumer group ID")
+	flag.StringVar(&cli.IPC, "ipc", "sink", "IPC API: sink, rpc, twin-header, twin-request, twin-response")
 	flag.StringVar(&cli.Parser, "parser", "snmp", "Sink API Parser: "+client.AvailableParsers.EnumAsString())
 	flag.IntVar(&promPort, "prometheus-port", promPort, "Port to export Prometheus metrics")
 	flag.Parse()
