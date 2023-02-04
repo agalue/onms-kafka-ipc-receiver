@@ -69,7 +69,7 @@ type KafkaClient struct {
 // createConfig Creates the Kafka Configuration object.
 func (cli *KafkaClient) createConfig() *sarama.Config {
 	config := kafka.DefaultSaramaSubscriberConfig()
-//	config.Version = sarama.V2_7_0_0
+	config.Version = sarama.V2_7_0_0
 	config.Consumer.Offsets.Initial = sarama.OffsetNewest
 	config.Consumer.Group.Session.Timeout = 6 * time.Second
 	return config
@@ -214,6 +214,9 @@ func (cli *KafkaClient) processPayload(data []byte, action ProcessMessage) {
 					log.Printf("[warn] invalid netflow message received: %v", err)
 					return
 				}
+				// Horrible Hack Begins
+				flow.NextHopHostname = fmt.Sprintf("src-addr=%s,src-port=%d,location=%s", msgLog.GetSourceAddress(), msgLog.GetSourcePort(), *msgLog.Location)
+				// Horrible Hack Ends
 				bytes, _ := json.MarshalIndent(flow, "", "  ")
 				action(bytes)
 			} else if cli.isSflow() {
