@@ -6,11 +6,18 @@ package netflow;
 
 option go_package = "./netflow";
 
+option java_multiple_files = true;
+option java_package = "org.opennms.netmgt.telemetry.protocols.netflow.transport";
+option java_outer_classname = "FlowProtos";
+
 import "google/protobuf/wrappers.proto";
+
+
 
 enum Direction {
     INGRESS = 0;
     EGRESS = 1;
+    UNKNOWN = 255;
 }
 
 enum SamplingAlgorithm {
@@ -29,6 +36,7 @@ enum NetflowVersion {
     V9 = 1;
     IPFIX = 2;
 }
+
 
 message FlowMessage {
     uint64 timestamp = 1;         // Flow timestamp in milliseconds.

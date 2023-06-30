@@ -6,6 +6,9 @@ package telemetry;
 
 option go_package = "./telemetry";
 
+option java_package = "org.opennms.netmgt.telemetry.common.ipc";
+option java_outer_classname = "TelemetryProtos";
+
 message TelemetryMessage {
     required uint64 timestamp = 1;
     required bytes bytes = 2;
