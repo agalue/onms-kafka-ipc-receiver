@@ -1,12 +1,11 @@
 module github.com/agalue/onms-kafka-ipc-receiver
 
-go 1.19
+go 1.20
 
 require (
 	github.com/Shopify/sarama v1.38.1
 	github.com/ThreeDotsLabs/watermill v1.3.0
 	github.com/ThreeDotsLabs/watermill-kafka/v2 v2.3.0
-	github.com/golang/protobuf v1.5.3
 	github.com/prometheus/client_golang v1.16.0
 	google.golang.org/protobuf v1.31.0
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
@@ -22,6 +21,7 @@ require (
 	github.com/eapache/queue v1.1.0 // indirect
 	github.com/go-logr/logr v1.2.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/uuid v1.3.0 // indirect

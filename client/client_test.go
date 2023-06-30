@@ -19,9 +19,9 @@ import (
 	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/netflow"
 	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/sink"
 	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/telemetry"
-	"github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/prometheus/client_golang/prometheus"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 	"gotest.tools/v3/assert"
 )
 
@@ -142,12 +142,12 @@ func TestNetflowParser(t *testing.T) {
 		NetflowVersion: netflow.NetflowVersion_V9,
 		Direction:      netflow.Direction_EGRESS,
 		Timestamp:      ts,
-		DeltaSwitched:  &wrappers.UInt64Value{Value: ts},
-		FirstSwitched:  &wrappers.UInt64Value{Value: ts},
-		LastSwitched:   &wrappers.UInt64Value{Value: ts + 1},
+		DeltaSwitched:  &wrapperspb.UInt64Value{Value: ts},
+		FirstSwitched:  &wrapperspb.UInt64Value{Value: ts},
+		LastSwitched:   &wrapperspb.UInt64Value{Value: ts + 1},
 		SrcAddress:     "11.0.0.1",
 		DstAddress:     "12.0.0.2",
-		NumBytes:       &wrappers.UInt64Value{Value: 1000},
+		NumBytes:       &wrapperspb.UInt64Value{Value: 1000},
 	}
 	netflowBytes, err := proto.Marshal(netflow)
 	assert.NilError(t, err)

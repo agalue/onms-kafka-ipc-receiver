@@ -23,9 +23,9 @@ import (
 	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/rpc"
 	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/sink"
 	"github.com/agalue/onms-kafka-ipc-receiver/protobuf/telemetry"
-	"github.com/golang/protobuf/proto"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"google.golang.org/protobuf/proto"
 )
 
 // AvailableParsers list of available parsers for the Sink API.
